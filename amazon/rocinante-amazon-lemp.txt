@@ -35,6 +35,7 @@ $ timedatectl timesync-status
 
 ------------- SSH настройки-------------------------------------------
 
+
 $ export SSH_PORT=<ssh port>
 
 $ sudo sed -i "s/^#?Port .*/Port $SSH_PORT/g" /etc/ssh/sshd_config
@@ -644,8 +645,15 @@ $ sudo chcon -Rv --type=cert_t /etc/nginx/tls
 
 $ openssl dhparam -out /etc/nginx/tls/dhparam.pem 4096
 
-$ sudo openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout /etc/nginx/tls/bochinskii.key \
--out /etc/nginx/tls/bochinskii.crt -subj "/C=Mars/ST= /L=Mars/O=MCR/OU= /CN=rocinante.in"
+
+
+export SSL_CERT=rocinante.crt
+
+export SSL_KEY=rocinante.key
+
+
+$ sudo openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout /etc/nginx/tls/$SSL_KEY \
+-out /etc/nginx/tls/$SSL_CERT -subj "/C=Mars/ST= /L=Mars/O=MCR/OU= /CN=rocinante.in"
 
 
 $ sudo chmod 0666 /etc/nginx/conf.d/test.conf
@@ -658,8 +666,8 @@ server {
     root /usr/share/nginx/html;
     index index.html index.php;
 
-    ssl_certificate /etc/nginx/tls/bochinskii.crt;
-    ssl_certificate_key /etc/nginx/tls/bochinskii.key;
+    ssl_certificate /etc/nginx/tls/$SSL_CERT;
+    ssl_certificate_key /etc/nginx/tls/$SSL_KEY;
 
     location ~ \.php$ {
         try_files \$uri =404;
@@ -726,8 +734,7 @@ $ restorecon -R -v $SITE_DIR/www
 
 
 export SITE_CONFIG=rocinante.conf
-export SSL_CERT=rocinante.crt
-export SSL_KEY=rocinante.key
+
 
 # sudo touch /etc/nginx/conf.d/$SITE_CONFIG
 
