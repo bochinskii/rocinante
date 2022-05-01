@@ -1,0 +1,1194 @@
+-------- Общие настройки ------
+
+
+
+$ export HOSTNAME=rocinante
+
+$ sudo yum update -y
+
+$ sudo hostnamectl set-hostname $HOSTNAME
+
+
+
+
+$ timedatectl list-timezones | column
+
+$ export TIMEZONE=Europe/Berlin
+
+$ sudo timedatectl set-timezone $TIMEZONE
+
+$ timedatectl status
+
+
+Использовать протокол NTP
+
+$ sudo timedatectl set-ntp true
+
+
+Посмотреть синхранизацию и подробную настройку
+
+$ timedatectl show-timesync --all
+
+$ timedatectl timesync-status
+
+
+
+------------- SSH настройки-------------------------------------------
+
+$ export SSH_PORT=1820
+
+$ sudo sed -i "s/^#?Port .*/Port $SSH_PORT/g" /etc/ssh/sshd_config
+
+
+
+$ sudo semanage port -l | grep ssh
+
+$ sudo semanage port -a -t ssh_port_t -p tcp 1820
+
+$ sudo semanage port -l | grep ssh
+
+
+
+$ sudo systemctl reload sshd
+
+
+
+
+--------- NGINX -------
+
+
+$ sudo yum install yum-utils
+
+
+$ sudo touch /etc/yum.repos.d/nginx.repo
+
+
+$ sudo chmod 0666 /etc/yum.repos.d/nginx.repo
+
+$ sudo cat << EOF > /etc/yum.repos.d/nginx.repo
+[nginx-stable]
+name=nginx stable repo
+baseurl=http://nginx.org/packages/amzn2/\$releasever/\$basearch/
+gpgcheck=1
+enabled=1
+gpgkey=https://nginx.org/keys/nginx_signing.key
+module_hotfixes=true
+
+[nginx-mainline]
+name=nginx mainline repo
+baseurl=http://nginx.org/packages/mainline/amzn2/\$releasever/\$basearch/
+gpgcheck=1
+enabled=0
+gpgkey=https://nginx.org/keys/nginx_signing.key
+module_hotfixes=true
+EOF
+
+$ sudo chmod 0644 /etc/yum.repos.d/nginx.repo
+
+
+$ sudo yum-config-manager --enable nginx-stable
+
+
+$ sudo yum install nginx -y
+
+$ sudo systemctl start nginx; sudo systemctl enable nginx
+
+
+
+$ sudo chown nginx:nginx /usr/share/nginx/html -R
+
+
+
+$ nginx -v
+
+----------------- nginx.conf ----------------------
+
+$ export WORKER_CONN=1024
+
+$ export WORKER_RLIMIT_NOFILE=4096
+
+
+$ sudo chmod 0666 /etc/nginx/nginx.conf
+
+
+$ sudo sed -i "s/.*worker_connections .*/    worker_connections $WORKER_CONN;/g" /etc/nginx/nginx.conf
+
+$ sudo sed -i "/.*worker_connections .*/a \    multi_accept on;" /etc/nginx/nginx.conf
+
+Вот это должно рассчитываться как worker_connections*2*(количество ядер процессора).
+Если число получается меньше чем 4096 (по-умолчанию), то можно не менять данный пораметр.
+
+# sudo sed -i "/^user .*/a worker_rlimit_nofile $WORKER_RLIMIT_NOFILE;" /etc/nginx/nginx.conf
+
+# sudo sed -i "/^user .*/a worker_priority -15;" /etc/nginx/nginx.conf
+
+
+$ sudo sed -i "/^user .*/a worker_cpu_affinity auto;" /etc/nginx/nginx.conf
+
+$ sudo sed -i "/^user .*/a pcre_jit on;" /etc/nginx/nginx.conf
+
+
+
+
+# sudo chmod 0644 /etc/nginx/nginx.conf
+
+
+----------------- Basic ---------------------------
+
+$ sudo touch /etc/nginx/conf.d/basic.conf
+
+$ sudo chmod 0666 /etc/nginx/conf.d/basic.conf
+
+$ sudo cat << EOF > /etc/nginx/conf.d/basic.conf
+# Basic ########################
+
+#sendfile on;
+tcp_nopush on;
+tcp_nodelay on;
+reset_timedout_connection on;
+#keepalive_timeout 120;
+keepalive_requests 1000;
+types_hash_max_size 2048;
+server_tokens off;
+send_timeout 30;
+client_body_timeout 30;
+client_header_timeout 30;
+server_names_hash_max_size 4096;
+EOF
+
+$ sudo chmod 0644 /etc/nginx/conf.d/basic.conf
+
+----------------- GZIP ----------------------------
+
+$ sudo touch /etc/nginx/conf.d/gzip.conf
+
+$ sudo chmod 0666 /etc/nginx/conf.d/gzip.conf
+
+$ sudo cat << EOF > /etc/nginx/conf.d/gzip.conf
+# Gzip ########################
+
+gzip on;
+gzip_static on;
+gzip_types text/plain text/css application/json application/x-javascript text/xml application/xml application/xml+rss text/javascript application/javascript image/x-icon image/svg+xml application/x-font-ttf;
+gzip_comp_level 9;
+gzip_proxied any;
+gzip_min_length 1000;
+gzip_disable "msie6";
+gzip_vary on;
+
+etag off;
+EOF
+
+$ sudo chmod 0644 /etc/nginx/conf.d/gzip.conf
+
+---------------- Limits -----------------------
+
+$ sudo touch /etc/nginx/conf.d/limits.conf
+
+$ sudo chmod 0666 /etc/nginx/conf.d/limits.conf
+
+$ sudo cat << EOF > /etc/nginx/conf.d/limits.conf
+# Limits ########################
+
+client_max_body_size 10m;
+client_body_buffer_size 128k;
+client_body_temp_path /var/cache/nginx/client_temp;
+
+proxy_connect_timeout 60;
+proxy_send_timeout 60;
+proxy_read_timeout 60;
+proxy_buffer_size 4k;
+proxy_buffers 8 16k;
+proxy_busy_buffers_size 64k;
+proxy_temp_file_write_size 64k;
+proxy_temp_path /var/cache/nginx/proxy_temp;
+EOF
+
+$ sudo chmod 0644 /etc/nginx/conf.d/limits.conf
+
+--------------- Zone Limits -----------------
+
+$ sudo touch /etc/nginx/conf.d/zone_limits.conf
+
+$ sudo chmod 0666 /etc/nginx/conf.d/zone_limits.conf
+
+$ sudo cat << EOF > /etc/nginx/conf.d/zone_limits.conf
+# Zone Limits ########################
+
+limit_conn_zone \$binary_remote_addr zone=perip:10m;
+limit_req_zone \$binary_remote_addr zone=lim_5r:10m rate=5r/s; # lim for dynamic page
+limit_req_zone \$binary_remote_addr zone=lim_1r:10m rate=1r/s; # lim for search page
+limit_req_zone \$binary_remote_addr zone=lim_10r:10m rate=10r/s;
+EOF
+
+# sudo chmod 0644 /etc/nginx/conf.d/zone_limits.conf
+
+--------------- TLS -------------------------
+
+$ sudo touch /etc/nginx/conf.d/tls.conf
+
+$ sudo chmod 0666 /etc/nginx/conf.d/tls.conf
+
+$ sudo cat << EOF > /etc/nginx/conf.d/tls.conf
+# TLS Settings ########################
+ssl_session_cache shared:SSL:50m;
+ssl_session_timeout 1d;
+ssl_session_tickets on;
+ssl_protocols TLSv1.2 TLSv1.3;
+ssl_ciphers HIGH:!aNULL:!MD5;
+ssl_prefer_server_ciphers on;
+ssl_dhparam /etc/nginx/tls/dhparam.pem;
+ssl_stapling on;
+ssl_stapling_verify on;
+add_header Strict-Transport-Security max-age=15768000;
+EOF
+
+$ sudo chmod 0644 /etc/nginx/conf.d/tls.conf
+
+
+
+$ sudo systemctl restart nginx
+
+
+--------------- MYSQL 8.0 -------------------
+
+
+export MYSQL_REPO=https://dev.mysql.com/get/mysql80-community-release-el7-6.noarch.rpm
+
+
+$ sudo yum install $MYSQL_REPO -y
+
+$ sudo amazon-linux-extras install epel -y
+
+$ sudo yum install mysql-community-server -y
+
+$ sudo systemctl start mysqld; sudo systemctl enable mysqld
+
+
+
+$ export MYSQL_TEMP_PASS=`sudo grep 'temporary password' /var/log/mysqld.log | cut -d: -f4 | cut -b 2-`
+
+$ export MYSQL_ROOT_PASS=<some root password>
+
+
+
+# sudo mysql_secure_installation -p$MYSQL_TEMP_PASS
+
+или
+
+Устанавливаем пароль для root вместо временного
+
+$ sudo mysql --connect-expired-password -uroot -p$MYSQL_TEMP_PASS \
+-e "ALTER USER 'root'@'localhost' IDENTIFIED WITH caching_sha2_password BY '$MYSQL_ROOT_PASS';"
+
+Удаляем анонимных пользователей
+
+$ sudo mysql --connect-expired-password -uroot -p$MYSQL_ROOT_PASS \
+-e "DELETE FROM mysql.user WHERE User='';"
+
+Убеждаемся, что пользователь root может иметь доступ только с localhost.
+
+$ sudo mysql --connect-expired-password -uroot -p$MYSQL_ROOT_PASS \
+-e "DELETE FROM mysql.user WHERE User='root' AND Host NOT IN ('localhost', '127.0.0.1', '::1');"
+
+Удаляем базу данных - test
+
+$ sudo mysql --connect-expired-password -uroot -p$MYSQL_ROOT_PASS \
+-e "DROP DATABASE IF EXISTS test; DELETE FROM mysql.db WHERE Db='test' OR Db='test\_%';"
+
+Очищаем privileges tables
+
+$ sudo mysql --connect-expired-password -uroot -p$MYSQL_ROOT_PASS -e "FLUSH PRIVILEGES;"
+
+
+
+$ mysql -V
+
+$ mysql -uroot -p
+
+
+---------------- Setting of my.cf ------------------------------
+
+
+$ sudo cp /etc/my.cnf /etc/my.cnf.bak
+
+$ sudo chmod 0666 /etc/my.cnf
+
+
+
+$ export MYSQL_SOCKET=`sudo cat /etc/my.cnf | grep -E "^socket.*" | cut -d= -f2`
+
+$ export INNODB_BUFFER_POOL=256M
+
+
+
+$ sudo cat << EOF >> /etc/my.cnf
+
+# [mysqld]
+
+# === Required Settings ===
+
+# datadir=/var/lib/mysql
+# socket=/var/lib/mysql/mysql.sock
+
+# log-error=/var/log/mysqld.log
+# pid-file=/var/run/mysqld/mysqld.pid
+
+# === Error & Slow Query Logging ===
+
+# log-error=/var/log/mysqld.log
+log_queries_not_using_indexes=0 # Disabled on production
+long_query_time=5
+slow_query_log=0 # Disabled on production
+slow_query_log_file=/var/lib/mysql/mysql_slow.log
+
+tmpdir=/tmp # Defaults
+port=3306 # Defaults
+# require_secure_transport = ON  # Require SSL connection
+bind-address=127.0.0.1 # Change to 0.0.0.0 to allow remote connections
+
+max_allowed_packet=256M # drupal requirements - 256M and > (error - "Packet too large")
+max_connect_errors=1000000
+
+skip_external_locking
+# skip_name_resolve  # если она указана, то обращение к mysql будет только по именам
+
+# === InnoDB Settings ===
+
+default_storage_engine=InnoDB
+innodb_buffer_pool_size=$INNODB_BUFFER_POOL # Use up to 50-80% of RAM
+innodb_buffer_pool_instances=1 # Use 1 instance per 1GB of InnoDB pool size - max is 64
+innodb_file_per_table=1 # drupal requirements
+innodb_flush_log_at_trx_commit=0 # drupal requirements. 0 - fastest but not reliable, 1 - slower but very reliable
+innodb_flush_method=O_DIRECT
+innodb_log_buffer_size=16M
+innodb_log_file_size=64M # drupal requirements
+innodb_sort_buffer_size= 4M # Defines how much data is read into memory for sorting operations before writing to disk (default is 1M / max is 64M)
+innodb_stats_on_metadata=0
+innodb_use_fdatasync=1 # Only (!) for MySQL v8.0.26+ # mysql --version
+
+# === MyISAM Settings ===
+
+key_buffer_size=24M   # UPD
+low_priority_updates=1
+concurrent_insert=2
+
+# === Connection Settings ===
+
+max_connections=100 # UPD - Important: high no. of connections = high RAM consumption
+thread_cache_size=100
+back_log=512
+thread_stack=192K
+interactive_timeout=300
+wait_timeout=300
+
+# === Buffer Settings === Careful RAM usage. Change this variables with some database diagnostics tools
+
+join_buffer_size=4M # UPD
+read_buffer_size=3M # UPD
+read_rnd_buffer_size=4M # UPD
+sort_buffer_size=4M # UPD
+
+
+# === Table Settings ===
+
+# open_files_limit=10000 # Default. Warning if error - "Too many open files". This can be 2x to 3x the table_open_cache value
+# table_open_cache=4000 # Default.
+# table_definition_cache=2000 # Default
+max_heap_table_size=128M  # Increase to 256M or 512M if you have lots of temporary tables because of missing indices in JOINs
+tmp_table_size=128M  # Use same value as max_heap_table_size
+
+# === Search Settings ===
+
+ft_min_word_len=3 # Minimum length of words to be indexed for search results
+
+
+# === Binary Logging ===
+
+disable_log_bin=1 # Binary logging disabled by default
+# log_bin # To enable binary logging, uncomment this line. Remember to comment out the line with "disable_log_bin"
+# binlog_expire_logs_seconds=86400 # Keep logs for 1 day (in seconds)
+
+
+[mysqldump]
+quick
+quote_names
+max_allowed_packet=1024M
+
+
+[mysql]
+port=3306
+socket=$MYSQL_SOCKET
+
+EOF
+
+$ sudo chmod 0644 /etc/my.cnf
+
+
+$ sudo systemctl restart mysqld.service
+
+
+--------------------- Дополнительно обезопасим с помощью ssl ---
+
+Укажим, что root может создавать соединение к mysql только используя ssl.
+Таким образом без дополнительных настроек с myphpadmin нельзя будет зайти под root.
+
+$ sudo mysql --connect-expired-password -uroot -p$MYSQL_ROOT_PASS \
+-e "ALTER USER 'root'@'localhost' REQUIRE SSL;"
+
+Должна быть ошибка
+$ sudo mysql --connect-expired-password -uroot -p$MYSQL_ROOT_PASS \
+-e "SELECT USER,plugin,ssl_type,host FROM mysql.user;"
+
+Должно быть все хорошо
+$ sudo mysql --connect-expired-password -uroot -p$MYSQL_ROOT_PASS \
+-e "SELECT USER,plugin,ssl_type,host FROM mysql.user;" --ssl-mode=REQUIRE
+
+
+-------------- Create ADMINISTRATOR ----------------------------
+
+# export MYSQL_ADMIN_USER=<mysql admin name>
+
+# export MYSQL_ADMIN_USER_PASS=<smysql admin password>
+
+
+
+$ sudo mysql --connect-expired-password -uroot -p$MYSQL_ROOT_PASS \
+-e "CREATE USER '$MYSQL_ADMIN_USER'@'localhost' IDENTIFIED BY '$MYSQL_ADMIN_USER_PASS';" --ssl-mode=REQUIRE
+
+
+Посмотреть пользователей
+
+$ sudo mysql --connect-expired-password -uroot -p$MYSQL_ROOT_PASS \
+-e "SELECT USER,plugin,ssl_type,host FROM mysql.user;" --ssl-mode=REQUIRE
+
+
+Если ошиблись вот как удалить пользователя
+
+$ sudo mysql --connect-expired-password -uroot -p$MYSQL_ROOT_PASS \
+-e "DROP USER 'someuser'@'localhost';" --ssl-mode=REQUIRE
+
+
+
+$ sudo mysql --connect-expired-password -uroot -p$MYSQL_ROOT_PASS \
+-e "GRANT ALL PRIVILEGES ON *.* TO '$MYSQL_ADMIN_USER'@'localhost'; FLUSH PRIVILEGES;" --ssl-mode=REQUIRE
+
+
+Если ошиблись вот как забрать права
+
+$ sudo mysql --connect-expired-password -uroot -p$MYSQL_ROOT_PASS \
+-e "REVOKE ALL PRIVILEGES ON *.* FROM 'someuser'@'localhost';" --ssl-mode=REQUIRE
+
+
+Посмотреть выданные привелегии
+
+$ sudo mysql --connect-expired-password -uroot -p$MYSQL_ROOT_PASS \
+-e "SHOW GRANTS FOR '$MYSQL_ADMIN_USER'@'localhost';" --ssl-mode=REQUIRE
+
+
+---------- Create database and user for Drupal -------------
+
+
+$ export MYSQL_DRUPAL_USER=<drupal user>
+
+$ export MYSQL_DRUPAL_USER_PASS=<drupal user password>
+
+$ export MYSQL_DRUPAL_DB=<drupal database>
+
+
+
+$ sudo mysql --connect-expired-password -u$MYSQL_ADMIN_USER -p$MYSQL_ADMIN_USER_PASS \
+-e "CREATE DATABASE $MYSQL_DRUPAL_DB CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+
+$ sudo mysql --connect-expired-password -u$MYSQL_ADMIN_USER -p$MYSQL_ADMIN_USER_PASS \
+-e "CREATE USER '$MYSQL_DRUPAL_USER'@'localhost' IDENTIFIED BY '$MYSQL_DRUPAL_USER_PASS';"
+
+
+$ sudo mysql --connect-expired-password -uroot -p$MYSQL_ROOT_PASS \
+-e "GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, DROP, INDEX, ALTER, CREATE TEMPORARY TABLES ON $MYSQL_DRUPAL_DB.* TO '$MYSQL_DRUPAL_USER'@'localhost'; FLUSH PRIVILEGES;" --ssl-mode=REQUIRE
+
+
+Если ошиблись забрать некоторые права
+
+$ sudo mysql --connect-expired-password -uroot -p$MYSQL_ROOT_PASS \
+-e "REVOKE INSERT, UPDATE, DELETE, CREATE, DROP ON $MYSQL_DRUPAL_DB.* FROM 'someuser'@'localhost';" --ssl-mode=REQUIRE
+
+
+$ sudo mysql --connect-expired-password -u$MYSQL_ADMIN_USER -p$MYSQL_ADMIN_USER_PASS \
+-e "SHOW GRANTS FOR '$MYSQL_DRUPAL_USER'@'localhost';"
+
+$ sudo mysql --connect-expired-password -u$MYSQL_ADMIN_USER -p$MYSQL_ADMIN_USER_PASS \
+-e "SHOW DATABASES;"
+
+$ sudo mysql --connect-expired-password -u$MYSQL_ADMIN_USER -p$MYSQL_ADMIN_USER_PASS \
+-e "SELECT USER,plugin,ssl_type,host FROM mysql.user;"
+
+
+----------------- PHP 8, PHP-FPM 8 --------------------------
+
+
+Посмотим какие версии есть
+
+$ sudo amazon-linux-extras | grep php
+
+
+$ sudo amazon-linux-extras enable php8.0
+
+
+$ sudo yum clean metadata
+
+$ sudo yum makecache
+
+$ sudo yum install php php-fpm php-pdo php-mysqlnd php-xml php-gd php-curl \
+php-mbstring php-json php-common php-gmp php-intl php-gd php-cli php-zip php-opcache -y
+
+
+Очень важная процедура. Даем права пользователю nginx к директориям с сессиями
+
+$ sudo chown nginx: /var/lib/php/session
+
+$ sudo chmod 0775 /var/lib/php
+
+
+$ sudo sed -i "s/^file_uploads = .*/file_uploads = On/g" /etc/php.ini
+
+$ sudo sed -i "s/^allow_url_fopen = .*/allow_url_fopen = On/g" /etc/php.ini
+
+$ sudo sed -i "s/^short_open_tag = .*/short_open_tag = On/g" /etc/php.ini
+
+$ sudo sed -i "s/^memory_limit = .*/memory_limit = 256M/g" /etc/php.ini
+
+$ sudo sed -i "s/^;cgi.fix_pathinfo=.*/cgi.fix_pathinfo = 0/g" /etc/php.ini
+
+$ sudo sed -i "s/^upload_max_filesize = .*/upload_max_filesize = 100M/g" /etc/php.ini
+
+$ sudo sed -i "s/^max_execution_time = .*/max_execution_time = 360/g" /etc/php.ini
+
+$ sudo sed -i "s%^;date.timezone =%date.timezone = $TIMEZONE%g" /etc/php.ini
+
+
+$ sudo sed -i "s/^user = .*/user = nginx/g" /etc/php-fpm.d/www.conf
+
+$ sudo sed -i "s/^group = .*/group = nginx/g" /etc/php-fpm.d/www.conf
+
+$ sudo sed -i "s/^;listen.owner = .*/listen.owner = nginx/g" /etc/php-fpm.d/www.conf
+
+$ sudo sed -i "s/^;listen.group = .*/listen.group = nginx/g" /etc/php-fpm.d/www.conf
+
+$ sudo sed -i "s/^;listen.mode = .*/listen.mode = 0660/g" /etc/php-fpm.d/www.conf
+
+
+Разрешаем httpd выполнять код php
+
+$ sudo setsebool -P httpd_execmem 1
+
+Разрешаем httpd создавать исходящие соединения
+
+$ sudo setsebool -P httpd_can_network_connect on
+
+
+
+$ sudo systemctl enable php-fpm; sudo systemctl start php-fpm
+
+$ sudo systemctl restart nginx
+
+
+----------------- Проверка работы PHP ---------------------------
+
+
+$ sudo touch /usr/share/nginx/html/info.php
+
+
+$ sudo chmod 0666 /usr/share/nginx/html/info.php
+
+$ sudo echo "<?php phpinfo(); ?>" > /usr/share/nginx/html/info.php
+
+$ sudo chmod 0644 /usr/share/nginx/html/info.php
+
+$ sudo touch /etc/nginx/conf.d/test.conf
+
+$ sudo chmod 0666 /etc/nginx/conf.d/test.conf
+
+$ sudo cat << EOF > /etc/nginx/conf.d/test.conf
+server {
+    listen 80 default_server;
+    server_name _;
+
+    root /usr/share/nginx/html;
+    index index.html index.php;
+
+    location ~ \.php$ {
+        try_files \$uri =404;
+        fastcgi_pass unix:/run/php-fpm/www.sock;
+        fastcgi_index   index.php;
+        fastcgi_param SCRIPT_FILENAME \$document_root\$fastcgi_script_name;
+        include fastcgi_params;
+    }
+
+}
+EOF
+
+$ sudo chmod 0644 /etc/nginx/conf.d/test.conf
+
+
+$ sudo systemctl restart nginx
+
+
+----------------  Check SSL ------------------------
+
+$ sudo mkdir /etc/nginx/tls
+
+$ sudo chcon -Rv --type=cert_t /etc/nginx/tls
+
+Занимает много времени
+
+$ openssl dhparam -out /etc/nginx/tls/dhparam.pem 4096
+
+$ sudo openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout /etc/nginx/tls/bochinskii.key \
+-out /etc/nginx/tls/bochinskii.crt -subj "/C=Mars/ST= /L=Mars/O=MCR/OU= /CN=rocinante.in"
+
+
+$ sudo chmod 0666 /etc/nginx/conf.d/test.conf
+
+$ sudo cat << EOF > /etc/nginx/conf.d/test.conf
+server {
+    listen 443 ssl http2 default_server;
+    server_name _;
+
+    root /usr/share/nginx/html;
+    index index.html index.php;
+
+    ssl_certificate /etc/nginx/tls/bochinskii.crt;
+    ssl_certificate_key /etc/nginx/tls/bochinskii.key;
+
+    location ~ \.php$ {
+        try_files \$uri =404;
+        fastcgi_pass unix:/run/php-fpm/www.sock;
+        fastcgi_index   index.php;
+        fastcgi_param SCRIPT_FILENAME \$document_root\$fastcgi_script_name;
+        include fastcgi_params;
+    }
+}
+
+server {
+    listen 80 default_server;
+    server_name _;
+
+    return 301 https://\$host\$request_uri;
+}
+EOF
+
+$ sudo chmod 0644 /etc/nginx/conf.d/test.conf
+
+$ sudo systemctl restart nginx
+
+
+$ openssl s_client -connect 192.168.0.249:443
+
+
+$ sudo rm /usr/share/nginx/html/info.php; sudo rm /etc/nginx/conf.d/test.conf
+
+
+
+$ sudo systemctl restart nginx
+
+
+----------------------- Drupal 9 -------------------
+
+
+export SITE_DIR=/var/www/html/rocinante
+
+
+$ sudo mkdir -p $SITE_DIR/{www,log}
+
+$ sudo curl -Lo /tmp/drupal.tar.gz https://www.drupal.org/download-latest/tar.gz
+
+$ sudo tar -xzvf /tmp/drupal.tar.gz -C $SITE_DIR/www --strip-components=1
+
+$ sudo chown -R nginx: $SITE_DIR
+
+
+
+$ sudo chcon -Rv --type=httpd_sys_rw_content_t $SITE_DIR/www
+
+или
+
+$ sudo chcon -Rv --type=httpd_sys_content_t $SITE_DIR/www
+
+$ semanage fcontext -a -t httpd_sys_rw_content_t "$SITE_DIR/www(/.*)?"
+
+или
+
+$ semanage fcontext -a -t httpd_sys_content_t "$SITE_DIR/www(/.*)?"
+
+
+$ restorecon -R -v $SITE_DIR/www
+
+
+export SITE_CONFIG=rocinante.conf
+export SSL_CERT=rocinante.crt
+export SSL_KEY=rocinante.key
+
+# sudo touch /etc/nginx/conf.d/$SITE_CONFIG
+
+# sudo chmod 0666 /etc/nginx/conf.d/$SITE_CONFIG
+
+# sudo cat << EOF > /etc/nginx/conf.d/$SITE_CONFIG
+server {
+    listen 443 ssl http2 default_server;
+    server_name _;
+    root $SITE_DIR/www;
+
+    ssl_certificate /etc/nginx/tls/$SSL_CERT;
+    ssl_certificate_key /etc/nginx/tls/$SSL_KEY;
+
+    access_log $SITE_DIR/log/access.log main;
+    error_log $SITE_DIR/log/error.log;
+
+   # phpMyAdmin:
+    location /dbadmin {
+        index index.php;
+
+    auth_basic "Only for me";
+        auth_basic_user_file /etc/nginx/.htpasswd;
+    }
+
+    location = /favicon.ico {
+        log_not_found off;
+        access_log off;
+    }
+
+    location = /robots.txt {
+        allow all;
+        log_not_found off;
+        access_log off;
+    }
+
+
+    # Very rarely should these ever be accessed outside of your lan
+    location ~* \.(txt|log)$ {
+        allow 192.168.0.0/16;
+        deny all;
+    }
+
+    location ~ \..*/.*\.php$ {
+        return 403;
+    }
+
+    location ~ ^/sites/.*/private/ {
+        return 403;
+    }
+
+    location ~ ^/sites/[^/]+/files/.*\.php$ {
+        deny all;
+    }
+
+    location ~* ^/.well-known/ {
+        allow all;
+    }
+
+    # Block access to "hidden" files and directories whose names begin with a
+    # period. This includes directories used by version control systems such
+    # as Subversion or Git to store control files.
+
+    location ~ (^|/)\. {
+        return 403;
+    }
+
+   location / {
+        try_files \$uri /index.php?\$query_string;
+    }
+
+    location @rewrite {
+        rewrite ^/(.*)$ /index.php?q=$1;
+    }
+
+    location ~ /vendor/.*\.php$ {
+        deny all;
+        return 404;
+    }
+
+    location ~* \.(engine|inc|install|make|module|profile|po|sh|.*sql|theme|twig|tpl(\.php)?|xtmpl|yml)(~|\.sw[op]|\.bak|\.orig|\.save)?$|^(\.(?!well-known).*|Entries.*|Repository|Root|Tag|Template|composer\.(json|lock)|web\.config)$|^#.*#$|\.php(~|\.sw[op]|\.bak|\.orig|\.save)$ {
+        deny all;
+        return 404;
+    }
+
+    location ~ '\.php$|^/update.php' {
+        fastcgi_split_path_info ^(.+?\.php)(|/.*)$;
+
+        try_files \$fastcgi_script_name =404;
+
+        include fastcgi_params;
+
+        fastcgi_param DOCUMENT_ROOT \$document_root;
+        fastcgi_param HTTP_PROXY "";
+        fastcgi_param SCRIPT_FILENAME \$document_root\$fastcgi_script_name;
+        fastcgi_param PATH_TRANSLATED \$document_root\$fastcgi_script_name;
+        fastcgi_param REQUEST_METHOD \$request_method;
+        fastcgi_param CONTENT_TYPE \$content_type;
+        fastcgi_param CONTENT_LENGTH \$content_length;
+        # when https is on
+        fastcgi_param HTTPS on;
+        fastcgi_param PATH_INFO \$fastcgi_path_info;
+        fastcgi_param QUERY_STRING \$query_string;
+
+        fastcgi_intercept_errors on;
+        fastcgi_index index.php;
+        fastcgi_ignore_client_abort off;
+        fastcgi_connect_timeout 60;
+        fastcgi_send_timeout 180;
+        fastcgi_read_timeout 180;
+        fastcgi_buffer_size 128k;
+        fastcgi_buffers 4 256k;
+        fastcgi_busy_buffers_size 256k;
+        fastcgi_temp_file_write_size 256k;
+
+        fastcgi_pass unix:/run/php-fpm/www.sock;
+    }
+
+    location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg)$ {
+        try_files \$uri @rewrite;
+        expires max;
+        log_not_found off;
+    }
+
+    location ~ ^/sites/.*/files/styles/ {
+        try_files \$uri @rewrite;
+    }
+
+    location ~ ^(/[a-z\-]+)?/system/files/ {
+        try_files \$uri /index.php?;
+    }
+
+    if (\$request_uri ~* "^(.*/)index\.php/(.*)") {
+        return 307 \$1$2;
+    }
+}
+
+server {
+    listen 80 default_server;
+    server_name _;
+
+    return 301 https://\$host\$request_uri;
+}
+EOF
+
+$ sudo chmod 0644 /etc/nginx/conf.d/$SITE_CONFIG
+
+$ sudo systemctl restart nginx
+
+
+
+-------------- PHP My Admin ----------------
+
+https://docs.phpmyadmin.net/en/latest/setup.html
+
+https://www.phpmyadmin.net/downloads/
+
+Будем логинится с учетными данными пользователей в mysql.
+
+
+$ sudo mkdir $SITE_DIR/www/dbadmin
+
+$ sudo curl -Lo /tmp/phpmyadmin.tar.xz https://files.phpmyadmin.net/phpMyAdmin/5.1.3/phpMyAdmin-5.1.3-all-languages.tar.xz
+
+$ sudo tar -xvf /tmp/phpmyadmin.tar.xz -C $SITE_DIR/www/dbadmin/ --strip-components=1
+
+$ sudo touch $SITE_DIR/www/dbadmin/config.in.php
+
+$ sudo chmod 0666 $SITE_DIR/www/dbadmin/config.in.php
+
+
+$ export PMA_BLOWFISH=`echo $RANDOM | md5sum | head -c 32; echo;`
+
+или
+
+$ export PMA_BLOWFISH=`echo $RANDOM | sha512sum | head -c 32; echo;`
+
+
+$ sudo cat << EOF > $SITE_DIR/www/dbadmin/config.in.php
+<?php
+
+$i = 0;
+
+/* Server: localhost [1] */
+\$i++;
+\$cfg['Servers'][\$i]['verbose'] = '';
+\$cfg['Servers'][\$i]['host'] = 'localhost';
+\$cfg['Servers'][\$i]['port'] = '';
+\$cfg['Servers'][\$i]['socket'] = '';
+\$cfg['Servers'][\$i]['auth_type'] = 'cookie';
+\$cfg['Servers'][\$i]['user'] = '';
+\$cfg['Servers'][\$i]['password'] = '';
+
+/* End of servers configuration */
+
+\$cfg['DefaultLang'] = 'en';
+\$cfg['blowfish_secret'] = '$PMA_BLOWFISH';
+\$cfg['ServerDefault'] = 1;
+\$cfg['UploadDir'] = '';
+\$cfg['SaveDir'] = '';
+
+\$cfg['TempDir'] = '$SITE_DIR/www/dbadmin/tmp';
+?>
+
+EOF
+
+$ sudo chmod 0644 $SITE_DIR/www/dbadmin/config.in.php
+
+$ sudo chown -R nginx: $SITE_DIR/www/dbadmin
+
+
+----------------- .htpasswd FOR PHPMYADMIN -----------------------
+
+
+$ export PMA_USER=$MYSQL_ADMIN_USER
+
+$ export PMA_HTPASSW=$MYSQL_ADMIN_USER_PASS
+
+
+Дополнительно к аутентификации mysql сделаем айтентификацию с помощью сервера nginx
+
+# sudo htpasswd -b -c /etc/nginx/.htpasswd $PMA_USER $PMA_HTPASSW
+
+или, но тогда пароль нужно вводить вручную
+
+# sh -c "echo -n $PMA_USER\: >> /etc/nginx/.htpasswd"
+# sh -c "openssl passwd -apr1 >> /etc/nginx/.htpasswd"
+
+
+
+-------------------- Logrotate -------------------------------
+
+$ sudo chmod 0666 /etc/logrotate.d/nginx
+
+$ sudo cat << EOF > /etc/logrotate.d/nginx
+/var/log/nginx/*.log {
+        daily
+        missingok
+        rotate 10
+        size 10M
+        compress
+        delaycompress
+        notifempty
+        create 640 nginx adm
+        sharedscripts
+        postrotate
+                if [ -f /var/run/nginx.pid ]; then
+                        kill -USR1 `cat /var/run/nginx.pid`
+                fi
+        endscript
+}
+
+EOF
+
+$ sudo chmod 0644 /etc/logrotate.d/nginx
+
+$ logrotate -d /etc/logrotate.d/nginx
+
+
+
+$ sudo chmod 0666 /etc/logrotate.d/php-fpm
+
+$ sudo cat << EOF > /etc/logrotate.d/php-fpm
+/var/log/php-fpm/*.log {
+    daily
+    missingok
+    rotate 10
+    size 10M
+    notifempty
+    sharedscripts
+    compress
+    delaycompress
+    postrotate
+        /bin/kill -SIGUSR1 `cat /run/php-fpm/php-fpm.pid 2>/dev/null` 2>/dev/null || true
+    endscript
+}
+
+EOF
+
+$ sudo chmod 0644 /etc/logrotate.d/php-fpm
+
+$ logrotate -d /etc/logrotate.d/php-fpm
+
+
+
+
+$ sudo chmod 0666 /etc/logrotate.d/mysql
+
+$ sudo cat << EOF > /etc/logrotate.d/mysql
+/var/log/mysqld.log {
+    create 640 mysql mysql
+    notifempty
+    daily
+    rotate 10
+    size 10M
+    missingok
+    compress
+    postrotate
+       # just if mysqld is really running
+       if test -x /usr/bin/mysqladmin && \
+          /usr/bin/mysqladmin ping &>/dev/null
+       then
+          /usr/bin/mysqladmin flush-logs
+       fi
+    endscript
+}
+
+EOF
+
+$ sudo chmod 0644 /etc/logrotate.d/mysql
+
+$ logrotate -d /etc/logrotate.d/mysql
+
+
+
+------------ Composer --------------------
+
+$ cd /tmp
+
+$ php -r "copy('https://getcomposer.org/installer', 'composer-setup.php');"
+
+
+$ HASH="$(wget -q -O - https://composer.github.io/installer.sig)"
+
+$ php -r "if (hash_file('SHA384', 'composer-setup.php') === '$HASH') { echo 'Installer verified'; } else { echo 'Installer corrupt'; unlink('composer-setup.php'); } echo PHP_EOL;"
+
+
+
+$ sudo php composer-setup.php --install-dir=/usr/bin --filename=composer
+
+
+----- Установка модулей  Drupal 9 ----------------
+
+https://www.drupal.org/docs/develop/using-composer/using-composer-to-install-drupal-and-manage-dependencies
+
+
+По сути мы таким образом делаем установку Drupal 9 с поддержкой composer. Т.е. можно было бы и нам таким образом установить,
+вместо того, как мы это делали выше, но мы сделали по другому т.к. установка с помощью composer в целях безопасности подходит для разработки.
+
+$ cd ~
+
+$ mkdir composer-project
+
+$ composer create-project drupal/recommended-project composer-project
+
+
+example:
+
+$ cd composer-project/
+
+$ composer require 'drupal/admin_toolbar:^3.1'
+
+$ sudo mv web/modules/contrib/admin_toolbar $SITE_DIR/www/modules/
+
+$ sudo chown -R nginx: $SITE_DIR/www
+
+
+-------------- Update Drupal 9 -------------------
+
+https://www.drupal.org/ru/docs/user_guide/ru/security-update-core.html
+
+
+
+$ sudo nano $SITE_DIR/www/sites/default/settings.php
+
+$settings['update_free_access'] = TRUE;
+
+
+
+$ sudo find $SITE_DIR/www -maxdepth 1 -type f -exec rm -f {} \;
+
+$ sudo rm -rf $SITE_DIR/www/{core,vendor}
+
+
+
+$ sudo curl -Lo /tmp/drupal.tar.gz https://www.drupal.org/download-latest/tar.gz
+
+$ sudo tar -xzvf /tmp/drupal.tar.gz -C $SITE_DIR/www --strip-components=1
+
+$ sudo chown -R nginx: $SITE_DIR/{www,log}
+
+
+
+In browser:
+
+httpd://<site name>/update.php
+
+
+
+
+$ sudo nano $SITE_DIR/www/sites/default/settings.php
+
+$settings['update_free_access'] = FALSE;
+
+
+--------------------- Drupal Backup --------------
+
+
+Делаем это с помощью phpmyadmin
+
+или
+
+$ sudo mysqldump --opt -v --databases $MYSQL_DRUPAL_DB -u$MYSQL_ADMIN_USER -p$MYSQL_ADMIN_USER_PASS > ~/$MYSQL_DRUPAL_DB.sql
+
+
+2-й вариант.
+Если вы хотите в будущем при восстановлении базы данных изменить ее имя, то нужно сделать вот так
+
+$ sudo mysqldump --opt -v --routines --triggers $MYSQL_DRUPAL_DB -u$MYSQL_ADMIN_USER -p$MYSQL_ADMIN_USER_PASS > ~/$MYSQL_DRUPAL_DB.sql
+
+
+Делаем архив сайта
+
+$ sudo tar -cjf ~/<archive name>.tar.bz $SITE_DIR/www
+
+
+
+
+----------------------- Drupal Restore ----------------
+
+
+Делаем это с помощью phpmyadmin
+
+или
+
+$ sudo mysql --connect-expired-password -u$MYSQL_ADMIN_USER -p$MYSQL_ADMIN_USER_PASS -e "SHOW DATABASES;"
+
+$ sudo mysql --connect-expired-password -u$MYSQL_ADMIN_USER -p$MYSQL_ADMIN_USER_PASS \
+-e "DROP DATABASE $MYSQL_DRUPAL_DB;"
+
+$ sudo mysql -u$MYSQL_ADMIN_USER -p$MYSQL_ADMIN_USER_PASS < ~/$MYSQL_DRUPAL_DB.sql
+
+
+
+Если при дампе базы вы использовали 2-й вариант и хотите использовать новое имя базы данных, то
+
+$ export MYSQL_DRUPAL_DB_NEW_NAME=<new name mysql db>
+
+$ sudo mysql --connect-expired-password -u$MYSQL_ADMIN_USER -p$MYSQL_ADMIN_USER_PASS \
+-e "CREATE DATABASE $MYSQL_DRUPAL_DB_NEW_NAME CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+
+$ sudo mysql -u$MYSQL_ADMIN_USER -p$MYSQL_ADMIN_USER_PASS -A -D$MYSQL_DRUPAL_DB_NEW_NAME < ~/$MYSQL_DRUPAL_DB.sql
+
+
+
+
+$ sudo tar -xvf ~/<archive name>.tar.bz2 -C $SITE_DIR/www --strip-components=4
+
+
+Если нужно изменить настройки Drupal касательно базы данных или пользователя базы данных, то изменяем вот эти строки как нужно в конце файла
+
+$ sudo nano $SITE_DIR/www/sites/default/settings.php
+
+
+$databases['default']['default'] = array (
+  'database' => '',
+  'username' => '',
+  'password' => '',
+  'prefix' => '',
+  'host' => 'localhost',
+  'port' => '3306',
+  'namespace' => 'Drupal\\Core\\Database\\Driver\\mysql',
+  'driver' => 'mysql',
+);

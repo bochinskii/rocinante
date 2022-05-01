@@ -1,0 +1,1881 @@
+
+Скачиваем дистрибутив от сюда
+
+https://cdimage.debian.org/cdimage/
+
+Образ на флэшку можно записатьс помощью - rufus (Windows)
+или balenaEtcher (ubuntu)
+
+https://github.com/balena-io/etcher/releases/tag/v1.7.8
+
+
+------ Admin user settings ---
+
+# su -l root
+
+(root)# usermod -a -G sudo denisb
+
+или
+
+(root)# echo "denisb ALL=(ALL:ALL) NOPASSWD: ALL" > /etc/sudoers.d/90-denisb
+
+(root)# systemctl reboot
+
+
+---------------- General --------------------
+
+
+# sudo hostnamectl set-hostname web-bochinskii
+
+
+-------- Network --------
+
+# ip link show
+
+# sudo nano /etc/network/interfaces
+
+auto eth0
+iface eth0 inet static
+address 192.168.1.35
+gateway 192.168.1.1
+netmask 255.255.255.0
+dns-nameservers 192.168.0.1
+
+# systemctl stop NetworkManager; systemctl disable NetworkManager; systemctl restart networking
+
+
+-------------- SSH ------------------------
+
+# sudo sed -i "s/^#Port .*/Port 1820/g" /etc/ssh/sshd_config
+
+Это можно и не делать т.к. по-умолчанию по ssh под пользователем root зайти нельзя, но укажем это явно.
+
+# sudo sed -i "s/^#PermitRootLogin .*/PermitRootLogin no/g" /etc/ssh/sshd_config
+
+
+
+# sudo systemctl restart sshd
+
+
+------------------- Repository --------------
+
+# sudo nano /etc/apt/sources.list
+
+deb http://mirror.yandex.ru/debian/ bullseye main
+deb-src http://mirror.yandex.ru/debian/ bullseye main
+
+deb http://mirror.yandex.ru/debian-security bullseye-security main contrib
+deb-src http://mirror.yandex.ru/debian-security bullseye-security main contrib
+
+deb http://mirror.yandex.ru/debian/ bullseye-updates main contrib
+deb-src http://mirror.yandex.ru/debian/ bullseye-updates main contrib
+
+
+Обновляем метаданные
+
+# sudo apt-get update -y
+
+
+
+Обновляем пакеты
+
+Ничего не удаляется, только обновляется
+# sudo apt-get upgrade -y
+
+или
+
+Могут удаляться некоторые зависимости
+# sudo apt-get dist-upgrade -y
+
+
+
+Чистим от лишнего
+
+# sudo apt-get autoremove -y; sudo apt-get autoclean -y
+
+
+Убедимся в правельных настройках
+
+# sudo apt-cache policy
+
+
+------------- Настройка синхронизации ремени ----------
+
+# timedatectl status
+
+# timedatectl list-timezones | column
+
+# sudo timedatectl set-timezone Europe/Moscow
+
+
+
+Настроим российские NPT сервера
+
+https://www.ntp-servers.net/servers.html
+
+https://www.pool.ntp.org/zone/ru
+
+
+Не использовать протокол NTP
+
+# sudo timedatectl set-ntp false
+
+Меняем NTP сервера
+
+# sudo nano /etc/systemd/timesyncd.conf
+
+FallbackNTPServers=0.ru.pool.ntp.org 1.ru.pool.ntp.org 2.ru.pool.ntp.org 3.ru.pool.ntp.org
+
+# sudo systemctl restart systemd-timesyncd
+
+Использовать протокол NTP
+
+# sudo timedatectl set-ntp true
+
+
+
+Посмотреть синхранизацию и подробную настройку
+
+# timedatectl show-timesync --all
+
+# timedatectl timesync-status
+
+
+------------- Полезные утилиты -----------
+
+# sudo apt-get install net-tools -y
+
+# sudo apt-get install htop iftop -y
+
+# sudo apt-get install ethtool -y
+
+# sudo apt-get install curl -y
+
+# sudo apt-get install util-linux e2fsck-static -y
+
+
+
+
+---------------- Настройка автоматических обновлений ТОЛЬКО пакетов безопасности  ---------------
+
+
+Проверим наличие пакета атоматической установки обновлений
+
+# dpkg -l unattended-upgrades
+
+если его нет, то
+
+# apt-get install unattended-upgrades -y
+
+# sudo systemctl start unattended-upgrades; sudo systemctl enable unattended-upgrades
+
+
+Проверим, что автоматические обновления включены
+(если в место - "1" будет "0", то выключены)
+
+# cat /etc/apt/apt.conf.d/20auto-upgrades
+APT::Periodic::Update-Package-Lists "1";
+APT::Periodic::Unattended-Upgrade "1";
+
+если выключены ("0"), то включим
+(будет две опции - "да" или "нет")
+
+# sudo dpkg-reconfigure -plow unattended-upgrades
+
+
+Убедимся, что у нас происходит автоматическое обновление только пакетов безопасности
+("//" - коментарии)
+
+# cat /etc/apt/apt.conf.d/50unattended-upgrades
+
+...
+Unattended-Upgrade::Origins-Pattern {
+//      "origin=Debian,codename=${distro_codename}-updates";
+//      "origin=Debian,codename=${distro_codename}-proposed-updates";
+        "origin=Debian,codename=${distro_codename},label=Debian";
+        "origin=Debian,codename=${distro_codename},label=Debian-Security";
+        "origin=Debian,codename=${distro_codename}-security,label=Debian-Security";
+};
+...
+
+Вот эта сточка с меткой - "Debian" обязательна, хоть она и не для установки пакетов безопасности.
+Она нужна т.к. при установки пакетов безопасности устаналиваются с нее некоторые зависимости.
+
+------------- Установка фаервола nftables ------------
+
+
+По-умолчанию nftables уже стоит в Debian 11, но в включен и не работает
+
+если вдруг его нет, то
+
+# sudo apt-get update
+
+# sudo apt-get install nftables -y
+
+
+# sudo nano /etc/nftables.conf
+#!/usr/sbin/nft -f
+
+flush ruleset
+
+table inet filter {
+        set LANv4 {
+                type ipv4_addr
+                flags interval
+
+                elements = { 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 169.254.0.0/16 }
+        }
+        set LANv6 {
+                type ipv6_addr
+                flags interval
+
+                elements = { fd00::/8, fe80::/10 }
+        }
+        set BLACKHOLEv4 {
+               type ipv4_addr
+               flags timeout
+               timeout 1d
+
+               # elements = { }
+
+        }
+        set BLACKHOLEv6 {
+               type ipv6_addr
+               flags timeout
+               timeout 1d
+
+               # elements = { }
+
+        }
+
+        chain input {
+                type filter hook input priority 0; policy drop;
+
+                ct state invalid drop comment "INVALID packets to us DROP"
+                ip saddr @BLACKHOLEv4 drop comment "all bad actors DROP"
+                ip6 saddr @BLACKHOLEv6 drop comment "all bad actors DROP"
+
+                iif lo ip saddr != 127.0.0.0/8 drop
+                iif lo ip6 saddr != ::1/128 drop
+                iif lo accept comment "Loopback ACCEPT"
+
+                # TCP Settings
+
+                ct state {related,established} accept comment "RELATED,ESTEBLISHED connections to us ACCEPT"
+
+                tcp flags != syn ct state new log prefix "FIRST PACKET IS NOT SYN" drop comment "if the connection is NEW and is not SYN then DROP"
+
+                tcp flags & (fin|syn|rst|psh|ack|urg) == 0x0 log prefix "TCP NULL" drop comment "TCP NULL packets DROP"
+
+                tcp flags & (fin|syn) == (fin|syn) log prefix "SCANNER1" drop comment "new and sending FIN the connection? DROP!"
+
+                tcp flags & (syn|rst) == (syn|rst) log prefix "SCANNER2" drop comment "i don't think we've met but you're sending a reset?"
+
+                tcp flags & (fin|syn|rst|psh|ack|urg) < (fin) log prefix "SCANNER3" drop comment "0 attack?"
+
+                tcp flags & (fin|syn|rst|psh|ack|urg) == (fin|psh|urg) log prefix "SCANNER4" drop comment "xmas attack. lights up everything"
+
+                # IMCP some types ACCEPT
+                ip6 nexthdr icmpv6 icmpv6 type { destination-unreachable, packet-too-big, time-exceeded, parameter-problem, mld-listener-query,
+                                                 mld-listener-report, mld-listener-reduction, nd-router-solicit, nd-router-advert, nd-neighbor-solicit,
+                                                 nd-neighbor-advert, ind-neighbor-solicit, ind-neighbor-advert, mld2-listener-report } accept
+                ip protocol icmp icmp type { destination-unreachable, router-solicitation, router-advertisement, time-exceeded, parameter-problem } accept
+
+                # ICMP echo-request ACCEPT with RATE LIMITS - variant #1
+                #ip protocol icmp icmp type echo-request limit rate 1/second accept comment "1 ICMP packet per second ACCEPT"
+                #ip protocol icmp icmp type echo-request limit rate over 1/second drop comment "if more than 1 ICMP packet per second DROP"
+                # or ICMP echo-request ACCEPT with RATE LIMITS - variant #2
+                ip protocol icmp icmp type echo-request limit rate 1/second burst 4 packets accept comment "1 ICMP packet per second ACCEPT, but you can exceed 4 ICMP packets"
+
+                # ICMP echo-request ACCEPT with RATE LIMITS - variant #1
+                #ip6 nexthdr icmpv6 icmpv6 type echo-request limit rate 1/second accept comment "1 ICMP packet per second ACCEPT"
+                #ip6 nexthdr icmpv6 icmpv6 type echo-request limit rate over 1/second drop comment "if more than 1 ICMP packet per second DROP"
+                # or ICMP echo-request ACCEPT with RATE LIMITS - variant #2
+                ip6 nexthdr icmpv6 icmpv6 type echo-request limit rate 1/second burst 4 packets accept comment "1 ICMP packet per second ACCEPT, but you can exceed 4 ICMP packets"
+
+                # IGMP ACCEPT
+                ip protocol igmp accept
+
+                # IPP/IPPS
+                ct state new tcp dport ipp accept comment "Accept IPP/IPPS (631)"
+
+                # DHCP
+                ct state new udp sport bootpc udp dport bootps ip saddr 0.0.0.0 ip daddr 255.255.255.255 accept comment "Accept DHCPDISCOVER (68, 67 - for DHCP-Proxy)"
+
+                # mDNS
+                ct state new udp dport mdns ip6 daddr ff02::fb accept comment "Accept mDNS (5353)"
+                ct state new udp dport mdns ip daddr 224.0.0.251 accept comment "Accept mDNS (5353)"
+
+                # SSH with avoid brute force
+                ct state new tcp dport 1820 limit rate 15/minute accept comment "SSH port ACCEPT with 15 connections per minute"
+                # ct state new tcp dport ssh limit rate 15/minute accept comment "SSH (22) port ACCEPT with 15 connections per minute"
+
+                # SMB
+                ip saddr @LANv4 ct state new udp dport netbios-ns accept comment "Accept NetBIOS Name Service (137 - nmbd)"
+                ip saddr @LANv4 ct state new udp dport netbios-dgm accept comment "Accept NetBIOS Datagram Service (138 - nmbd)"
+                ip saddr @LANv4 ct state new tcp dport netbios-ssn accept comment "Accept NetBIOS Session Service (139 - smbd)"
+                ip saddr @LANv4 ct state new tcp dport microsoft-ds accept comment "Accept Microsoft Directory Service (445 - smbd)"
+
+                ip6 saddr @LANv6 ct state new udp dport netbios-ns accept comment "Accept NetBIOS Name Service (137 - nmbd)"
+                ip6 saddr @LANv6 ct state new udp dport netbios-dgm accept comment "Accept NetBIOS Datagram Service (138 - nmbd)"
+                ip6 saddr @LANv6 ct state new tcp dport netbios-ssn accept comment "Accept NetBIOS Session Service (139 - smbd)"
+                ip6 saddr @LANv6 ct state new tcp dport microsoft-ds accept comment "Accept Microsoft Directory Service (445 - smbd)"
+
+                # NFS
+                ip saddr @LANv4 ct state new udp dport sunrpc accept comment "Portmaper port (111)"
+                ip saddr @LANv4 ct state new tcp dport sunrpc accept comment "Portmaper port (111)"
+                ip saddr @LANv4 ct state new udp dport nfs accept comment "NFS server (2049)"
+                ip saddr @LANv4 ct state new tcp dport nfs accept comment "NFS server (2049)"
+
+                ip6 saddr @LANv6 ct state new udp dport sunrpc accept comment "Portmaper port (111)"
+                ip6 saddr @LANv6 ct state new tcp dport sunrpc accept comment "Portmaper port (111)"
+                ip6 saddr @LANv6 ct state new udp dport nfs accept comment "NFS server (2049)"
+                ip6 saddr @LANv6 ct state new tcp dport nfs accept comment "NFS server (2049)"
+
+                # TFTP
+                ip saddr @LANv4 ct state new udp dport tftp accept comment "TFTP server (69)"
+
+                ip6 saddr @LANv6 ct state new udp dport tftp accept comment "TFTP server (69)"
+
+
+                ct state new tcp dport { http, https } accept comment "WEB ports (80, 443) ACCEPT"
+        }
+        chain forward {
+                type filter hook forward priority 0; policy drop;
+        }
+        chain output {
+                type filter hook output priority 0; policy drop;
+
+                oif lo ip daddr != 127.0.0.0/8 drop
+                oif lo ip6 daddr != ::1/128 drop
+
+                ct state invalid drop comment "INVALID packets from us DROP"
+                ct state {new,related,established} accept comment "NEW,RELATED,ESTEBLISHED connections from us ACCEPT"
+        }
+}
+
+
+
+# sudo systemctl start nftables.service; sudo systemctl enable nftables.service
+
+Посмотреть имена таблиц
+
+# sudo nft list tables
+table inet filter
+
+Посмотреть все цепочки и правила в данной таблице
+
+# sudo nft list table inet filter
+
+Посмотреть определенную цепочку в данной таблице
+
+# sudo nft list chain inet filter input
+
+
+Посмотреть имена портов
+
+# cat /etc/services
+
+
+
+------------------ Preparing and SFTP -----------------------------
+
+
+# mkdir -p /web/sites/www.bochinskii.in/{www,log}
+
+
+
+# sudo useradd -s /usr/sbin/nologin -d /web/sites/www.bochinskii.in bochinskii.in
+
+
+# sudo su
+
+(root)# export USER_PASSWD=<some password>
+
+Only root can do that
+
+(root)# echo -e "$USER_PASSWD\n$USER_PASSWD" | passwd bochinskii.in
+
+(root)# exit
+
+
+# sudo groupadd sftp
+
+# sudo usermod -a -G sftp bochinskii.in
+
+!!!! Эту команду нужно использовать когда поставите nginx
+
+# sudo usermod -a -G bochinskii.in nginx
+
+
+Комментируем строчку
+
+# sudo sed -i "s/^Subsystem.*/#Subsystem  sftp  \/usr\/lib\/openssh\/sftp-server/g" /etc/ssh/sshd_config
+
+Вставляем свой конфиг
+
+# sudo cat << EOF >> /etc/ssh/sshd_config
+# ===
+# === SFTP Settings
+# ===
+Subsystem sftp internal-sftp -u 022
+Match Group sftp
+ChrootDirectory %h
+ForceCommand internal-sftp -u 022
+
+EOF
+
+
+# sudo systemctl restart sshd
+
+
+# sudo chown root:bochinskii.in /web/sites/www.bochinskii.in/
+
+# sudo chown -R bochinskii.in:bochinskii.in /web/sites/www.bochinskii.in/{www,log}
+
+
+
+# sudo chmod 0755 /web/sites/www.bochinskii.in/
+
+
+
+
+--------- NGINX -------
+
+
+https://nginx.org/ru/linux_packages.html#Debian
+
+
+
+
+# sudo apt-get install curl gnupg2 ca-certificates lsb-release debian-archive-keyring -y
+
+# curl https://nginx.org/keys/nginx_signing.key | gpg --dearmor \
+    | sudo tee /usr/share/keyrings/nginx-archive-keyring.gpg >/dev/null
+
+# gpg --dry-run --quiet --import --import-options import-show /usr/share/keyrings/nginx-archive-keyring.gpg
+
+# echo "deb [signed-by=/usr/share/keyrings/nginx-archive-keyring.gpg] \
+http://nginx.org/packages/debian `lsb_release -cs` nginx" \
+    | sudo tee /etc/apt/sources.list.d/nginx.list
+
+# echo -e "Package: *\nPin: origin nginx.org\nPin: release o=nginx\nPin-Priority: 900\n" \
+    | sudo tee /etc/apt/preferences.d/99nginx
+
+
+# sudo apt-get update
+
+# sudo apt-get upgrade
+
+# sudo apt-get install nginx -y
+
+
+# sudo systemctl start nginx; sudo systemctl enable nginx
+
+# sudo nginx -v
+
+# sudo chown nginx:nginx /usr/share/nginx/html -R
+
+----------------- nginx.conf ----------------------
+
+
+# sudo sed -i "s/.*worker_connections .*/    worker_connections 1024;/g" /etc/nginx/nginx.conf
+
+# sudo sed -i "/.*worker_connections .*/a \    multi_accept on;" /etc/nginx/nginx.conf
+
+# sudo sed -i "/.*worker_connections .*/a \    use epoll;" /etc/nginx/nginx.conf
+
+# sudo sed -i "/^user .*/a worker_cpu_affinity auto;" /etc/nginx/nginx.conf
+
+
+Вот это должно рассчитываться как worker_connections*2*(количество ядер процессора)
+Т.е. в нашем случае (https://serverspace.ru/services/cloud-servers/): CPU 2, RAM 2 GB 1024*2*2
+
+# sudo sed -i "/^user .*/a worker_rlimit_nofile 4096;" /etc/nginx/nginx.conf
+
+# sudo sed -i "/^user .*/a worker_priority -15;" /etc/nginx/nginx.conf
+
+# sudo sed -i "/^user .*/a pcre_jit on;" /etc/nginx/nginx.conf
+
+
+
+----------------- Basic ---------------------------
+
+# sudo touch /etc/nginx/conf.d/basic.conf
+
+# sudo chmod 0666 /etc/nginx/conf.d/basic.conf
+
+# sudo cat << EOF > /etc/nginx/conf.d/basic.conf
+# Basic ########################
+
+# senfile defined in nginx.conf
+# sendfile on;
+tcp_nopush on;
+tcp_nodelay on;
+reset_timedout_connection on;
+#keepalive_timeout 120;
+keepalive_requests 1000;
+types_hash_max_size 2048;
+server_tokens off;
+send_timeout 30;
+client_body_timeout 30;
+client_header_timeout 30;
+server_names_hash_max_size 4096;
+EOF
+
+# sudo chmod 0644 /etc/nginx/conf.d/basic.conf
+
+----------------- GZIP ----------------------------
+
+# sudo touch /etc/nginx/conf.d/gzip.conf
+
+# sudo chmod 0666 /etc/nginx/conf.d/gzip.conf
+
+# sudo cat << EOF > /etc/nginx/conf.d/gzip.conf
+# Gzip ########################
+
+gzip on; 
+gzip_static on; 
+gzip_types text/plain text/css application/json application/x-javascript text/xml application/xml application/xml+rss text/javascript application/javascript image/x-icon image/svg+xml application/x-font-ttf;
+gzip_comp_level 9;
+gzip_proxied any;
+gzip_min_length 1000;
+gzip_disable "msie6";
+gzip_vary on;
+
+etag off;
+EOF
+
+# sudo chmod 0644 /etc/nginx/conf.d/gzip.conf
+
+---------------- Limits -----------------------
+
+# sudo touch /etc/nginx/conf.d/limits.conf
+
+# sudo chmod 0666 /etc/nginx/conf.d/limits.conf
+
+# sudo cat << EOF > /etc/nginx/conf.d/limits.conf
+# Limits ########################
+    
+client_max_body_size 10m;
+# For import db through PHPMyAdmin
+# client_max_body_size 1000m
+client_body_buffer_size 128k;
+client_body_temp_path /var/cache/nginx/client_temp;
+
+proxy_connect_timeout 60;
+proxy_send_timeout 60;
+proxy_read_timeout 60;
+proxy_buffer_size 4k;
+proxy_buffers 8 16k;
+proxy_busy_buffers_size 64k;
+proxy_temp_file_write_size 64k;
+proxy_temp_path /var/cache/nginx/proxy_temp;
+EOF
+
+# sudo chmod 0644 /etc/nginx/conf.d/limits.conf
+
+--------------- Zone Limits -----------------
+
+# sudo touch /etc/nginx/conf.d/zone_limits.conf
+
+# sudo chmod 0666 /etc/nginx/conf.d/zone_limits.conf
+
+# sudo cat << EOF > /etc/nginx/conf.d/zone_limits.conf
+# Zone Limits ########################
+    
+limit_conn_zone \$binary_remote_addr zone=perip:10m;
+limit_req_zone \$binary_remote_addr zone=lim_5r:10m rate=5r/s; # lim for dynamic page
+limit_req_zone \$binary_remote_addr zone=lim_1r:10m rate=1r/s; # lim for search page
+limit_req_zone \$binary_remote_addr zone=lim_10r:10m rate=10r/s;
+EOF
+
+# sudo chmod 0644 /etc/nginx/conf.d/zone_limits.conf
+
+--------------- TLS -------------------------
+
+# sudo touch /etc/nginx/conf.d/tls.conf
+
+# sudo chmod 0666 /etc/nginx/conf.d/tls.conf
+
+# sudo cat << EOF > /etc/nginx/conf.d/tls.conf
+# TLS Settings ########################
+ssl_session_cache shared:SSL:50m;
+ssl_session_timeout 1d;
+ssl_session_tickets on;
+ssl_protocols TLSv1.2 TLSv1.3;
+ssl_ciphers HIGH:!aNULL:!MD5;
+ssl_prefer_server_ciphers on;
+ssl_dhparam /etc/nginx/tls/dhparam.pem;
+ssl_stapling on;
+ssl_stapling_verify on;
+add_header Strict-Transport-Security max-age=15768000;
+EOF
+
+# sudo chmod 0644 /etc/nginx/conf.d/tls.conf
+
+--------------- Monitoring Server -----------
+
+# sudo touch /etc/nginx/conf.d/monitoring_server.conf
+
+# sudo chmod 0666 /etc/nginx/conf.d/monitoring_server.conf
+
+# sudo cat << EOF > /etc/nginx/conf.d/monitoring_server.conf
+# Monitoring server ###########
+
+server {
+    listen 127.0.0.1:80;
+    server_name status.localhost;
+    keepalive_timeout 0;
+    allow 127.0.0.1;
+    deny all;
+    access_log off;
+
+    location /server-status {
+        stub_status on;
+    }
+
+}
+EOF
+
+# sudo chmod 0644 /etc/nginx/conf.d/monitoring_server.conf
+
+
+--------------- TLS -----------------------
+
+# sudo mkdir /etc/nginx/tls
+
+
+Занимает много времени
+# sudo openssl dhparam -out /etc/nginx/tls/dhparam.pem 4096
+
+# sudo openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout /etc/nginx/tls/bochinskii.key -out /etc/nginx/tls/bochinskii.crt -subj "/C=RU/ST= /L=Donetsk/O= /OU= /CN=bochinskii.in"
+
+
+Проверить конфигурацию на ошибки
+
+# sudo nginx -t
+
+
+Вывести всю конфигурацию на экран
+
+# sudo nginx -T
+
+
+
+# sudo systemctl restart nginx
+
+
+
+Проверим сервер мониторинга
+
+# curl 127.0.0.1/server-status
+
+
+
+--------------- MYSQL 8.0 -------------------
+
+
+# export MYSQL_ROOT_PASS=<some password>
+
+
+
+# sudo curl -Lo /tmp/mysql-apt-config_0.8.22-1_all.deb https://dev.mysql.com/get/mysql-apt-config_0.8.22-1_all.deb
+
+# sudo apt-get install /tmp/mysql-apt-config_0.8.22-1_all.deb
+
+Выйдет меню в котором нужно выбрать - "MySQL Server & Cluster" и нажать - "TAB", который выделить - "OK".
+Теперь нужно нажать - "Enter".
+
+Далее выбираем - mysql-8.0, если вам не нужен кластер.
+
+Далее возвратится "первое" меню. Там вибираем - "OK", потом - "TAB" и нажимаем - "Enter"
+
+Если где-то ошиблись, то меню это можно вызвать вот таким образом
+
+?# sudo dpkg-reconfigure mysql-apt-config
+
+
+# sudo apt-get update
+
+# sudo apt-get upgrade
+
+
+
+# sudo apt-get install mysql-server -y
+
+В начале устновки выйдет меню и попросит ввести пароль для - "root".
+Можно ввести пароль, который вы занесли в переменную - "MYSQL_ROOT_PASS"
+
+
+
+Проверим, что мы точно установили 8 версию.
+
+# apt policy mysql-server
+
+# mysql -V
+
+После установки он стартует и находится в состоянии - "enable".
+
+# systemctl status mysql.service; systemctl is-enabled mysql.service
+
+
+
+Делаем безопасную установку.
+
+# sudo mysql_secure_installation -p$MYSQL_ROOT_PASS
+
+
+или
+
+
+Устанавливаем пароль для root, если нужно. !!!!!!!!!! Мы не будем этого делать.
+
+# export MYSQL_ROOT_NEW_PASS=<some password>
+
+# sudo mysql --connect-expired-password -uroot -p$MYSQL_ROOT_PASS -e "ALTER USER 'root'@'localhost' IDENTIFIED WITH caching_sha2_password BY '$MYSQL_ROOT_NEW_PASS';"
+
+
+Удаляем анонимных пользователей
+
+# sudo mysql --connect-expired-password -uroot -p$MYSQL_ROOT_PASS -e "DELETE FROM mysql.user WHERE User='';"
+
+
+Убеждаемся, что пользователь root может иметь доступ только с localhost.
+
+# sudo mysql --connect-expired-password -uroot -p$MYSQL_ROOT_PASS -e "DELETE FROM mysql.user WHERE User='root' AND Host NOT IN ('localhost', '127.0.0.1', '::1');"
+
+
+Удаляем базу данных - test
+
+# sudo mysql --connect-expired-password -uroot -p$MYSQL_ROOT_PASS -e "DROP DATABASE IF EXISTS test; DELETE FROM mysql.db WHERE Db='test' OR Db='test\_%';"
+
+
+Очищаем privileges tables
+
+# sudo mysql --connect-expired-password -uroot -p$MYSQL_ROOT_PASS -e "FLUSH PRIVILEGES;"
+
+
+---------------- Setting of my.cf ------------------------------
+
+
+https://gist.github.com/fevangelou/fb72f36bbe333e059b66
+
+
+Посмотреть все установленные переменные
+
+# sudo mysql --connect-expired-password -uroot -p$MYSQL_ROOT_PASS -e "SHOW VARIABLES;"
+
+Посмотреть определенную переменную
+
+# sudo mysql --connect-expired-password -uroot -p$MYSQL_ROOT_PASS -e "SHOW VARIABLES LIKE '%max_connect_errors%';"
+
+Можно делать изменения в конфигурационные файлы *.cnf или непосредственно через SQL команды
+
+# sudo mysql --connect-expired-password -uroot -p$MYSQL_ROOT_PASS -e "SET max_connect_errors=256;"
+
+но мы будем использовать конфигурационные файлы
+
+
+
+
+export MYSQL_SOCKET=`sudo cat /etc/mysql/mysql.conf.d/mysqld.cnf | grep -E "^socket.*" | cut -d= -f2`
+
+
+# sudo cp /etc/mysql/mysql.conf.d/mysqld.cnf ~/mysqld.cnf.bak
+
+
+# sudo chmod 0666 /etc/mysql/mysql.conf.d/mysqld.cnf
+
+# sudo cat << EOF >> /etc/mysql/mysql.conf.d/mysqld.cnf
+
+# [mysqld]
+
+# === Required Settings ===
+
+# datadir=/var/lib/mysql
+# socket=/var/run/mysqld/mysqld.sock
+
+# log-error=/var/log/mysql/error.log
+# pid-file=/var/run/mysqld/mysqld.pid
+
+# === Error & Slow Query Logging ===
+
+# log-error=/var/log/mysqld.log
+log_queries_not_using_indexes=0 # Disabled on production
+long_query_time=5
+slow_query_log=0 # Disabled on production
+slow_query_log_file=/var/lib/mysql/mysql_slow.log
+
+tmpdir=/tmp # Defaults
+port=3306 # Defaults
+# require_secure_transport = ON  # Require SSL connection
+bind_address=127.0.0.1 # Change to 0.0.0.0 to allow remote connections
+
+max_allowed_packet=256M # drupal requirements - 256M and > (error - "Packet too large")
+max_connect_errors=1000000
+
+skip_external_locking
+# skip_name_resolve  # если она указана, то обращение к mysql будет только по именам
+
+# === InnoDB Settings ===
+
+default_storage_engine=InnoDB
+innodb_buffer_pool_size=1G # Use up to 50-80% of RAM
+innodb_buffer_pool_instances=1 # Use 1 instance per 1GB of InnoDB pool size - max is 64
+innodb_file_per_table=1 # drupal requirements
+innodb_flush_log_at_trx_commit=0 # drupal requirements. 0 - fastest but not reliable, 1 - slower but very reliable
+innodb_flush_method=O_DIRECT
+innodb_log_buffer_size=16M
+innodb_log_file_size=64M # drupal requirements
+innodb_sort_buffer_size= 4M # Defines how much data is read into memory for sorting operations before writing to disk (default is 1M / max is 64M)
+innodb_stats_on_metadata=0
+innodb_use_fdatasync=1 # Only (!) for MySQL v8.0.26+ # mysql --version
+
+# === MyISAM Settings ===
+
+key_buffer_size=24M   # UPD
+low_priority_updates=1
+concurrent_insert=2
+
+# === Connection Settings ===
+
+max_connections=100 # UPD - Important: high no. of connections = high RAM consumption
+thread_cache_size=100
+back_log=512
+thread_stack=192K
+interactive_timeout=300
+wait_timeout=300
+
+# === Buffer Settings === Careful RAM usage. Change this variables with some database diagnostics tools
+
+join_buffer_size=4M # UPD 
+read_buffer_size=3M # UPD
+read_rnd_buffer_size=4M # UPD
+sort_buffer_size=4M # UPD
+
+
+# === Table Settings ===
+
+# open_files_limit=10000 # Default. Warning if error - "Too many open files". This can be 2x to 3x the table_open_cache value
+# table_open_cache=4000 # Default.
+# table_definition_cache=2000 # Default
+max_heap_table_size=128M  # Increase to 256M or 512M if you have lots of temporary tables because of missing indices in JOINs
+tmp_table_size=128M  # Use same value as max_heap_table_size
+
+# === Search Settings ===
+
+ft_min_word_len=3 # Minimum length of words to be indexed for search results
+
+
+# === Binary Logging ===
+
+disable_log_bin=1 # Binary logging disabled by default
+# log_bin # To enable binary logging, uncomment this line. Remember to comment out the line with "disable_log_bin"
+# binlog_expire_logs_seconds=86400 # Keep logs for 1 day (in seconds)
+
+
+[mysqldump]
+quick
+quote_names
+max_allowed_packet=1024M
+
+EOF
+
+# sudo chmod 0644 /etc/mysql/mysql.conf.d/mysqld.cnf
+
+
+
+# sudo cp /etc/mysql/conf.d/mysql.cnf ~/mysql.cnf.bak
+
+# sudo chmod 0666 /etc/mysql/conf.d/mysql.cnf
+
+# sudo cat << EOF >> /etc/mysql/conf.d/mysql.cnf
+
+#[mysql]
+
+port=3306
+socket=$MYSQL_SOCKET
+
+EOF
+
+
+# sudo chmod 0644 /etc/mysql/conf.d/mysql.cnf
+
+
+# sudo systemctl restart mysql.service
+
+
+----------------- полезные команды -----------------
+
+# sudo mysql --connect-expired-password -uroot -p$MYSQL_ROOT_PASS -e "SHOW PROCESSLIST;"
+
+или
+
+# sudo mysql --connect-expired-password -uroot -p$MYSQL_ROOT_PASS -e "SHOW STATUS WHERE `variable_name` = 'Threads_connected';"
+
+
+
+
+--------------------- Дополнительно обезопасим с помощью ssl ---
+
+Укажим, что root может создавать соединение к mysql только используя ssl.
+Таким образом без дополнительных настроек с myphpadmin нельзя будет зайти под root.
+
+# sudo mysql --connect-expired-password -uroot -p$MYSQL_ROOT_PASS -e "ALTER USER 'root'@'localhost' REQUIRE SSL;"
+
+Должна быть ошибка
+# sudo mysql --connect-expired-password -uroot -p$MYSQL_ROOT_PASS -e "SELECT USER,plugin,ssl_type,host FROM mysql.user;"
+
+Должно быть все хорошо
+# sudo mysql --connect-expired-password -uroot -p$MYSQL_ROOT_PASS -e "SELECT USER,plugin,ssl_type,host FROM mysql.user;" --ssl-mode=REQUIRE
+
+
+-------------- Create ADMINISTRATOR ----------------------------
+
+
+# export MYSQL_ADMIN_USER=denisb
+
+# export MYSQL_ADMIN_USER_PASS=<some password>
+
+
+# sudo mysql --connect-expired-password -uroot -p$MYSQL_ROOT_PASS -e "CREATE USER '$MYSQL_ADMIN_USER'@'localhost' IDENTIFIED BY '$MYSQL_ADMIN_USER_PASS';" --ssl-mode=REQUIRE
+
+# sudo mysql --connect-expired-password -uroot -p$MYSQL_ROOT_PASS -e "SELECT USER,plugin,ssl_type,host FROM mysql.user;" --ssl-mode=REQUIRE
+
+
+Если ошиблись вот как удалить пользователя
+
+# sudo mysql --connect-expired-password -uroot -p$MYSQL_ROOT_PASS -e "DROP USER 'someuser'@'localhost';" --ssl-mode=REQUIRE
+
+
+
+# sudo mysql --connect-expired-password -uroot -p$MYSQL_ROOT_PASS -e "GRANT ALL PRIVILEGES ON *.* TO '$MYSQL_ADMIN_USER'@'localhost'; FLUSH PRIVILEGES;" --ssl-mode=REQUIRE
+
+
+Если ошиблись вот как забрать права
+
+# sudo mysql --connect-expired-password -uroot -p$MYSQL_ROOT_PASS -e "REVOKE ALL PRIVILEGES ON *.* FROM 'someuser'@'localhost';" --ssl-mode=REQUIRE
+
+
+Посмотреть выданные привелегии
+
+# sudo mysql --connect-expired-password -uroot -p$MYSQL_ROOT_PASS -e "SHOW GRANTS FOR '$MYSQL_ADMIN_USER'@'localhost';" --ssl-mode=REQUIRE
+
+
+
+---------- Create database and user for Drupal -------------
+
+
+# export MYSQL_DRUPAL_USER=bochinskii_in_usr
+
+# export MYSQL_DRUPAL_USER_PASS=<some password>
+
+# export MYSQL_DRUPAL_DB=bochinskii_in_db
+
+
+
+# sudo mysql --connect-expired-password -u$MYSQL_ADMIN_USER -p$MYSQL_ADMIN_USER_PASS -e "CREATE DATABASE $MYSQL_DRUPAL_DB CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+
+# sudo mysql --connect-expired-password -u$MYSQL_ADMIN_USER -p$MYSQL_ADMIN_USER_PASS -e "CREATE USER '$MYSQL_DRUPAL_USER'@'localhost' IDENTIFIED BY '$MYSQL_DRUPAL_USER_PASS';"
+
+
+# sudo mysql --connect-expired-password -uroot -p$MYSQL_ROOT_PASS -e "GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, DROP, INDEX, ALTER, CREATE TEMPORARY TABLES ON $MYSQL_DRUPAL_DB.* TO '$MYSQL_DRUPAL_USER'@'localhost'; FLUSH PRIVILEGES;" --ssl-mode=REQUIRE
+
+
+Если ошиблись забрать некоторые права
+
+# sudo mysql --connect-expired-password -uroot -p$MYSQL_ROOT_PASS -e "REVOKE INSERT, UPDATE, DELETE, CREATE, DROP ON $MYSQL_DRUPAL_DB.* FROM 'someuser'@'localhost';" --ssl-mode=REQUIRE
+
+
+# sudo mysql --connect-expired-password -u$MYSQL_ADMIN_USER -p$MYSQL_ADMIN_USER_PASS -e "SHOW GRANTS FOR '$MYSQL_DRUPAL_USER'@'localhost';"
+
+# sudo mysql --connect-expired-password -u$MYSQL_ADMIN_USER -p$MYSQL_ADMIN_USER_PASS -e "SHOW DATABASES;"
+
+# sudo mysql --connect-expired-password -u$MYSQL_ADMIN_USER -p$MYSQL_ADMIN_USER_PASS -e "SELECT USER,plugin,ssl_type,host FROM mysql.user;"
+
+
+
+----------------- PHP 8, PHP-FPM 8 --------------------------
+
+
+
+Будем устанавливать вот php репозиторий от этого официального разработчика Debian
+
+https://packages.sury.org
+
+https://packages.sury.org/php/README.txt
+
+
+Если мы будем хранить сессии в "нашей" директории, то делаем
+
+# mkdir -p /web/sites/www.bochinskii.in/sessions
+
+# sudo chown bochinskii.in:bochinskii.in /web/sites/www.bochinskii.in/sessions/
+
+
+# sudo apt-get update
+
+# sudo apt-get upgrade
+
+# sudo apt-get install apt-transport-https lsb-release ca-certificates curl -y
+
+# sudo curl -sSLo /usr/share/keyrings/deb.sury.org-php.gpg https://packages.sury.org/php/apt.gpg
+
+# sudo sh -c 'echo "deb [signed-by=/usr/share/keyrings/deb.sury.org-php.gpg] https://packages.sury.org/php/ $(lsb_release -sc) main" > /etc/apt/sources.list.d/php.list'
+
+
+
+
+# sudo apt-get update
+
+# sudo apt-get upgrade -y
+
+# sudo apt-get install php8.0 php8.0-cli php8.0-common php8.0-opcache php8.0-readline php8.0-fpm php8.0-mysql php8.0-xml php8.0-gd php8.0-curl php8.0-mbstring \
+php8.0-gmp php8.0-intl php8.0-zip -y
+
+
+
+# sudo chmod 0666 /etc/php/8.0/fpm/php.ini
+
+# sudo sed -i "s/^file_uploads = .*/file_uploads = On/g" /etc/php/8.0/fpm/php.ini
+
+# sudo sed -i "s/^allow_url_fopen = .*/allow_url_fopen = On/g" /etc/php/8.0/fpm/php.ini
+
+# sudo sed -i "s/^short_open_tag = .*/short_open_tag = On/g" /etc/php/8.0/fpm/php.ini
+
+# sudo sed -i "s/^memory_limit = .*/memory_limit = 256M/g" /etc/php/8.0/fpm/php.ini
+
+# sudo sed -i "s/^;cgi.fix_pathinfo=.*/cgi.fix_pathinfo = 0/g" /etc/php/8.0/fpm/php.ini
+
+# sudo sed -i "s/^upload_max_filesize = .*/upload_max_filesize = 100M/g" /etc/php/8.0/fpm/php.ini
+
+# sudo sed -i "s/^max_execution_time = .*/max_execution_time = 360/g" /etc/php/8.0/fpm/php.ini
+
+# sudo sed -i "s%^;date.timezone =%date.timezone = Europe/Moscow%g" /etc/php/8.0/fpm/php.ini
+
+# sudo chmod 0644 /etc/php/8.0/fpm/php.ini
+
+
+
+Это важно если php-fpm уже запущен
+
+# sudo systemctl stop php8.0-fpm.service
+
+
+# sudo cp /etc/php/8.0/fpm/pool.d/www.conf /etc/php/8.0/fpm/pool.d/www.bochinskii.in.conf
+
+# sudo mv /etc/php/8.0/fpm/pool.d/www.conf /etc/php/8.0/fpm/pool.d/www.conf.bak
+
+
+# sudo chmod 0666 /etc/php/8.0/fpm/pool.d/www.bochinskii.in.conf
+
+
+# sudo sed -i "s/^\[www\]/\[www.bochinskii.in\]/g" /etc/php/8.0/fpm/pool.d/www.bochinskii.in.conf
+
+# sudo sed -i "s/^user = .*/user = bochinskii.in/g" /etc/php/8.0/fpm/pool.d/www.bochinskii.in.conf
+
+# sudo sed -i "s/^group = .*/group = bochinskii.in/g" /etc/php/8.0/fpm/pool.d/www.bochinskii.in.conf
+
+# sudo sed -i "s/^listen = .*/listen = \/run\/php\/www.bochinskii.in.sock/g" /etc/php/8.0/fpm/pool.d/www.bochinskii.in.conf
+
+# sudo sed -i "s/^listen.owner = .*/listen.owner = bochinskii.in/g" /etc/php/8.0/fpm/pool.d/www.bochinskii.in.conf
+
+# sudo sed -i "s/^listen.group = .*/listen.group = nginx/g" /etc/php/8.0/fpm/pool.d/www.bochinskii.in.conf
+
+# sudo sed -i "s/^listen.mode = .*/listen.mode = 0660/g" /etc/php/8.0/fpm/pool.d/www.bochinskii.in.conf
+
+Т.к. Nginx и php-fpm находятся на одном сервере
+
+# sudo sed -i "s/^;listen.allowed_clients.*/listen.allowed_clients = 127.0.0.1/g" /etc/php/8.0/fpm/pool.d/www.bochinskii.in.conf
+
+
+Далее настройки в зависимости от сервера.
+Узнаем количество CPU и RAM
+
+# echo Cores = $(( $(lscpu | awk '/^Socket/{ print $2 }') * $(lscpu | awk '/^Core/{ print $4 }') ))
+
+Cores = 1
+
+или
+
+# sudo cat /proc/cpuinfo | grep -E "^cpu cores"
+
+cpu cores       : 1
+
+
+# sudo cat /proc/meminfo | grep -E "MemTotal"
+
+MemTotal:        2048000 kB
+
+или
+
+# free -h | grep -E "^Mem" | awk '{ print $2 }'
+
+2Gi
+
+Выясним, сколько один php-fpm процесс потребляет RAM
+
+# ps --no-headers -o "rss,cmd" -C php-fpm8.0 | awk '{ sum+=$1 } END { printf ("%d%s\n", sum/NR/1024,"M") }'
+
+25M
+
+или
+
+тут обращаем внимание на RSS
+
+# ps -ylC php-fpm8.0 --sort:rss
+
+S   UID     PID    PPID  C PRI  NI   RSS    SZ WCHAN  TTY          TIME CMD
+S  1001     625     531  0  80   0 23528 56261 -      ?        00:00:00 php-fpm8.0
+S  1001     626     531  0  80   0 25584 56773 -      ?        00:00:00 php-fpm8.0
+S     0     531       1  0  80   0 32424 56152 -      ?        00:00:00 php-fpm8.0
+
+
+
+Тут есть три варианта
+
+1. Этот вариант хорош, когда у вас сервер с малым количеством RAM.
+
+# sudo sed -i "s/^pm = .*/pm = dynamic/g" /etc/php/8.0/fpm/pool.d/www.bochinskii.in.conf
+
+У нас 2 ГБ RAM, мы хотим выделить для php-fpm - 1 ГБ. 1000/25 = 40
+
+# sudo sed -i "s/^pm.max_children = .*/pm.max_children = 40/g" /etc/php/8.0/fpm/pool.d/www.bochinskii.in.conf
+
+У нас 1 Core - 1*4 = 4
+
+# sudo sed -i "s/^pm.start_servers = .*/pm.start_servers = 4/g" /etc/php/8.0/fpm/pool.d/www.bochinskii.in.conf
+
+У нас 1 Core - 1*2 = 2
+
+# sudo sed -i "s/^pm.min_spare_servers = .*/pm.min_spare_servers = 2/g" /etc/php/8.0/fpm/pool.d/www.bochinskii.in.conf
+
+У нас 1 Core - 1*4 = 4
+
+# sudo sed -i "s/^pm.max_spare_servers = .*/pm.max_spare_servers = 4/g" /etc/php/8.0/fpm/pool.d/www.bochinskii.in.conf
+
+Эти параметры подходят для большенства инсталяций
+
+# sudo sed -i "s/^;pm.process_idle_timeout .*/pm.process_idle_timeout = 10s/g" /etc/php/8.0/fpm/pool.d/www.bochinskii.in.conf
+
+# sudo sed -i "s/^;pm.max_requests .*/pm.max_requests = 200/g" /etc/php/8.0/fpm/pool.d/www.bochinskii.in.conf
+
+
+
+
+2. Этот вариант хорош, когда у вас сервер с малым количествой RAM.
+
+# sudo sed -i "s/^pm = .*/pm = ondemand/g" /etc/php/8.0/fpm/pool.d/www.bochinskii.in.conf
+
+У нас 2 ГБ RAM, мы хотим выделить для php-fpm - 1 ГБ. 1000/25 = 40
+
+# sudo sed -i "s/^pm.max_children = .*/pm.max_children = 40/g" /etc/php/8.0/fpm/pool.d/www.bochinskii.in.conf
+
+# sudo sed -i "s/^;pm.process_idle_timeout .*/pm.process_idle_timeout = 10s/g" /etc/php/8.0/fpm/pool.d/www.bochinskii.in.conf
+
+# sudo sed -i "s/^;pm.max_requests .*/pm.max_requests = 200/g" /etc/php/8.0/fpm/pool.d/www.bochinskii.in.conf
+
+
+
+3. Этот вариант хорош, когда у вас достаточно много RAM.
+
+# sudo sed -i "s/^pm = .*/pm = static/g" /etc/php/8.0/fpm/pool.d/www.bochinskii.in.conf
+
+У нас 2 ГБ RAM, мы хотим выделить для php-fpm - 1 ГБ. 1000/25 = 40
+
+# sudo sed -i "s/^pm.max_children = .*/pm.max_children = 40/g" /etc/php/8.0/fpm/pool.d/www.bochinskii.in.conf
+
+
+
+
+Мы выберем второй вариант
+
+
+# sudo sed -i "s/^;pm.status_path .*/pm.status_path = \/status/g" /etc/php/8.0/fpm/pool.d/www.bochinskii.in.conf
+
+# sudo sed -i "s/^;access.log .*/access.log = \/web\/sites\/www.bochinskii.in\/log\/www.bochinskii.in-access.log/g" /etc/php/8.0/fpm/pool.d/www.bochinskii.in.conf
+
+# sudo cat << EOF >> /etc/php/8.0/fpm/pool.d/www.bochinskii.in.conf
+
+php_admin_value[error_log] = /web/sites/www.bochinskii.in/log/www.bochinskii.in-error.log
+php_admin_flag[log_errors] = on
+php_value[session.save_handler] = files
+# if we want save session in own derectory
+php_value[session.save_path] = /web/sites/www.bochinskii.in/sessions
+
+EOF
+
+
+# sudo chmod 0644 /etc/php/8.0/fpm/pool.d/www.bochinskii.in.conf
+
+
+# sudo systemctl start php8.0-fpm.service; sudo systemctl enable php8.0-fpm.service
+
+# sudo systemctl restart nginx; sudo systemctl restart mysql
+
+
+
+
+Посмотреть какие версии PHP установлены
+
+# update-alternatives --list php
+
+Установить определенную версию PHP по-умолчанию
+
+# sudo update-alternatives --set php /usr/bin/php8.0
+
+
+Посмотреть все установленные модули
+
+# php -m
+
+----------------- Check PHP ---------------------------
+
+
+# sudo touch /web/sites/www.bochinskii.in/www/info.php
+
+# sudo chmod 0666 /web/sites/www.bochinskii.in/www/info.php
+
+# sudo echo "<?php phpinfo(); ?>" > /web/sites/www.bochinskii.in/www/info.php
+
+# sudo chmod 0644 /web/sites/www.bochinskii.in/www/info.php
+
+
+# sudo touch /web/sites/www.bochinskii.in/www/index.html
+
+# sudo chmod 0666 /web/sites/www.bochinskii.in/www/index.html
+
+# sudo echo "<h1>It works!</h1>" > /web/sites/www.bochinskii.in/www/index.html
+
+# sudo chmod 0644 /web/sites/www.bochinskii.in/www/index.html
+
+
+# sudo chown -R bochinskii.in:bochinskii.in /web/sites/www.bochinskii.in/www
+
+
+# sudo touch /etc/nginx/conf.d/test.conf
+
+# sudo chmod 0666 /etc/nginx/conf.d/test.conf
+
+# sudo cat << EOF > /etc/nginx/conf.d/test.conf
+server {
+    listen 80 default_server;
+    server_name _;
+
+    root /web/sites/www.bochinskii.in/www;
+    index index.html index.php;
+
+    location ~ \.php$ {
+        try_files \$uri =404;
+        fastcgi_pass unix:/run/php/www.bochinskii.in.sock;
+        fastcgi_index   index.php;
+        fastcgi_param SCRIPT_FILENAME \$document_root\$fastcgi_script_name;
+        include fastcgi_params;
+    }
+
+}
+EOF
+
+# sudo chmod 0644 /etc/nginx/conf.d/test.conf
+
+
+# sudo nginx -t
+
+# sudo systemctl restart nginx
+
+
+----------------  Check TLS ------------------------
+
+
+# sudo chmod 0666 /etc/nginx/conf.d/test.conf
+
+# sudo cat << EOF > /etc/nginx/conf.d/test.conf
+server {
+    listen 443 ssl http2 default_server;
+    server_name _;
+
+    root /web/sites/www.bochinskii.in/www;
+    index index.html index.php;
+
+    ssl_certificate /etc/nginx/tls/bochinskii.crt;
+    ssl_certificate_key /etc/nginx/tls/bochinskii.key;
+
+    location ~ \.php$ {
+        try_files \$uri =404;
+        fastcgi_pass unix:/run/php/www.bochinskii.in.sock;
+        fastcgi_index   index.php;
+        fastcgi_param SCRIPT_FILENAME \$document_root\$fastcgi_script_name;
+        include fastcgi_params;
+    }
+}
+
+server {
+    listen 80 default_server;
+    server_name _;
+
+    return 301 https://\$host\$request_uri;
+}
+EOF
+
+# sudo chmod 0644 /etc/nginx/conf.d/test.conf
+
+
+
+# sudo systemctl restart nginx
+
+
+Проверим
+
+# openssl s_client -connect localhost:443
+
+
+
+# sudo rm -fr /web/sites/www.bochinskii.in/www/*; sudo rm -f /etc/nginx/conf.d/test.conf
+
+# sudo systemctl restart nginx
+
+
+
+----------------------- Drupal 9 -------------------
+
+
+# sudo curl -Lo /tmp/drupal.tar.gz https://www.drupal.org/download-latest/tar.gz
+
+# sudo tar -xzvf /tmp/drupal.tar.gz -C /web/sites/www.bochinskii.in/www --strip-components=1
+
+# sudo chown -R bochinskii.in: /web/sites/www.bochinskii.in/www
+
+
+# sudo touch /etc/nginx/conf.d/bochinskii.in.conf
+
+# sudo chmod 0666 /etc/nginx/conf.d/bochinskii.in.conf
+
+# sudo cat << EOF > /etc/nginx/conf.d/bochinskii.in.conf
+server {
+    listen 443 ssl http2 default_server;
+    server_name _;
+    root /web/sites/www.bochinskii.in/www;
+
+    ssl_certificate /etc/nginx/tls/bochinskii.crt;
+    ssl_certificate_key /etc/nginx/tls/bochinskii.key;
+
+    access_log /web/sites/www.bochinskii.in/log/access.log main;
+    error_log /web/sites/www.bochinskii.in/log/error.log;
+
+   # phpMyAdmin:
+    location /dbadmin {
+        index index.php;
+        
+        auth_basic "Only for me";
+        auth_basic_user_file /etc/nginx/.htpasswd;
+    }
+
+    location = /favicon.ico {
+        log_not_found off;
+        access_log off;
+    }
+
+    location = /robots.txt {
+        allow all;
+        log_not_found off;
+        access_log off;
+    }
+    
+
+    # Very rarely should these ever be accessed outside of your lan
+    location ~* \.(txt|log)$ {
+        allow 192.168.0.0/16;
+        deny all;
+    }
+
+    location ~ \..*/.*\.php$ {
+        return 403;
+    }
+
+    location ~ ^/sites/.*/private/ {
+        return 403;
+    }
+
+    location ~ ^/sites/[^/]+/files/.*\.php$ {
+        deny all;
+    }
+
+    location ~* ^/.well-known/ {
+        allow all;
+    }
+    
+    # Block access to "hidden" files and directories whose names begin with a
+    # period. This includes directories used by version control systems such
+    # as Subversion or Git to store control files.
+
+    location ~ (^|/)\. {
+        return 403;
+    }
+   
+   location / {
+        try_files \$uri /index.php?\$query_string;
+    }
+
+    location @rewrite {
+        rewrite ^/(.*)$ /index.php?q=$1;
+    }
+
+    location ~ /vendor/.*\.php$ {
+        deny all;
+        return 404;
+    }
+
+    location ~* \.(engine|inc|install|make|module|profile|po|sh|.*sql|theme|twig|tpl(\.php)?|xtmpl|yml)(~|\.sw[op]|\.bak|\.orig|\.save)?$|^(\.(?!well-known).*|Entries.*|Repository|Root|Tag|Template|composer\.(json|lock)|web\.config)$|^#.*#$|\.php(~|\.sw[op]|\.bak|\.orig|\.save)$ {
+        deny all;
+        return 404;
+    }
+
+    location ~ '\.php$|^/update.php' {
+        fastcgi_split_path_info ^(.+?\.php)(|/.*)$;
+
+        try_files \$fastcgi_script_name =404;
+
+        include fastcgi_params;
+
+        fastcgi_param DOCUMENT_ROOT \$document_root;		
+        fastcgi_param HTTP_PROXY "";
+        fastcgi_param SCRIPT_FILENAME \$document_root\$fastcgi_script_name;
+        fastcgi_param PATH_TRANSLATED \$document_root\$fastcgi_script_name;
+        fastcgi_param REQUEST_METHOD \$request_method;
+        fastcgi_param CONTENT_TYPE \$content_type;
+        fastcgi_param CONTENT_LENGTH \$content_length;
+        # when https is on
+        fastcgi_param HTTPS on; 
+        fastcgi_param PATH_INFO \$fastcgi_path_info;
+        fastcgi_param QUERY_STRING \$query_string;
+		
+        fastcgi_intercept_errors on;
+        fastcgi_index index.php;
+        fastcgi_ignore_client_abort off;
+        fastcgi_connect_timeout 60;
+        fastcgi_send_timeout 180;
+        fastcgi_read_timeout 180;
+        fastcgi_buffer_size 128k;
+        fastcgi_buffers 4 256k;
+        fastcgi_busy_buffers_size 256k;
+        fastcgi_temp_file_write_size 256k;
+
+        fastcgi_pass unix:/run/php/www.bochinskii.in.sock;
+		
+    }
+
+    location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg)$ {
+        try_files \$uri @rewrite;
+        expires max;
+        log_not_found off;
+    }
+
+    location ~ ^/sites/.*/files/styles/ {
+        try_files \$uri @rewrite;
+    }
+
+    location ~ ^(/[a-z\-]+)?/system/files/ {
+        try_files \$uri /index.php?;
+    }
+
+    if (\$request_uri ~* "^(.*/)index\.php/(.*)") {
+        return 307 \$1$2;
+    }
+}
+
+server {
+    listen 80 default_server;
+    server_name _;
+
+    return 301 https://\$host\$request_uri;
+}
+EOF
+
+
+# sudo chmod 0644 /etc/nginx/conf.d/bochinskii.in.conf
+
+
+# sudo systemctl restart nginx
+
+
+
+
+-------------- PHP My Admin ----------------
+
+# export PMA_BLOWFISH=qbD4j45Zm7svLCgg2gEg0kggg9qYBkEuS
+
+
+
+https://docs.phpmyadmin.net/en/latest/setup.html
+
+https://www.phpmyadmin.net/downloads/
+
+Будем логинится с учетными данными пользователей в mysql.
+
+
+# sudo mkdir /web/sites/www.bochinskii.in/www/dbadmin
+
+# sudo curl -Lo /tmp/phpmyadmin.tar.xz https://files.phpmyadmin.net/phpMyAdmin/5.1.3/phpMyAdmin-5.1.3-all-languages.tar.xz
+
+# sudo tar -xvf /tmp/phpmyadmin.tar.xz -C /web/sites/www.bochinskii.in/www/dbadmin/ --strip-components=1
+
+# sudo touch /web/sites/www.bochinskii.in/www/dbadmin/config.in.php
+
+# sudo chmod 0666 /web/sites/www.bochinskii.in/www/dbadmin/config.in.php
+
+# sudo cat << EOF > /web/sites/www.bochinskii.in/www/dbadmin/config.in.php
+<?php
+
+$i = 0;
+
+/* Server: localhost [1] */
+\$i++;
+\$cfg['Servers'][\$i]['verbose'] = '';
+\$cfg['Servers'][\$i]['host'] = 'localhost';
+\$cfg['Servers'][\$i]['port'] = '';
+\$cfg['Servers'][\$i]['socket'] = '';
+\$cfg['Servers'][\$i]['auth_type'] = 'cookie';
+\$cfg['Servers'][\$i]['user'] = '';
+\$cfg['Servers'][\$i]['password'] = '';
+
+/* End of servers configuration */
+
+\$cfg['DefaultLang'] = 'en';
+\$cfg['blowfish_secret'] = '$PMA_BLOWFISH';
+\$cfg['ServerDefault'] = 1;
+\$cfg['UploadDir'] = '';
+\$cfg['SaveDir'] = '';
+
+\$cfg['TempDir'] = '/web/sites/www.bochinskii.in/www/dbadmin/tmp';
+?>
+
+EOF
+
+
+# sudo chmod 0644 /web/sites/www.bochinskii.in/www/dbadmin/config.in.php
+
+# sudo chown -R bochinskii.in: /web/sites/www.bochinskii.in/www
+
+
+
+----------------- .htpasswd FOR PHPMYADMIN -----------------------
+
+# export PMA_USER=denisb
+
+# export PMA_HTPASSW=<some password>
+
+
+Дополнительно к аутентификации mysql сделаем айтентификацию с помощью сервера nginx 
+
+# sudo apt-get update
+
+# sudo apt-get upgrade
+
+# sudo apt-get install apache2-utils -y
+
+# sudo htpasswd -b -c /etc/nginx/.htpasswd $PMA_USER $PMA_HTPASSW
+
+или, но тогда пароль нужно вводить вручную
+
+# sh -c "echo -n $PMA_USER\: >> /etc/nginx/.htpasswd"
+
+# sh -c "openssl passwd -apr1 >> /etc/nginx/.htpasswd"
+
+
+-------------------- Logrotate -------------------------------
+
+
+# sudo chmod 0666 /etc/logrotate.d/nginx
+
+# sudo cat << EOF > /etc/logrotate.d/nginx
+/var/log/nginx/*.log {
+        daily
+        missingok
+        rotate 10
+        size 10M		
+        compress
+        delaycompress
+        notifempty
+        create 640 nginx adm
+        sharedscripts
+        postrotate
+                if [ -f /var/run/nginx.pid ]; then
+                        kill -USR1 `cat /var/run/nginx.pid`
+                fi
+        endscript
+}
+
+EOF
+
+# sudo chmod 0644 /etc/logrotate.d/nginx
+
+
+
+Провести ротацию логов немедленно
+
+# sudo logrotate -d /etc/logrotate.d/nginx
+
+
+
+# sudo chmod 0666 /etc/logrotate.d/php8.0-fpm
+
+# sudo cat << EOF > /etc/logrotate.d/php8.0-fpm
+/var/log/php8.0-fpm.log  {
+    daily
+    missingok
+    rotate 10
+    size 10M
+    notifempty
+    sharedscripts
+    compress
+    delaycompress
+    postrotate
+        if [ -x /usr/lib/php/php8.0-fpm-reopenlogs ]; then
+                /usr/lib/php/php8.0-fpm-reopenlogs;
+        fi
+    endscript
+}
+
+EOF
+
+# sudo chmod 0644 /etc/logrotate.d/php8.0-fpm
+
+
+# sudo logrotate -d /etc/logrotate.d/php8.0-fpm
+
+
+
+# sudo touch /etc/logrotate.d/mysql
+
+# sudo chmod 0666 /etc/logrotate.d/mysql
+
+# sudo cat << EOF > /etc/logrotate.d/mysql
+/var/log/mysql/*.log {
+    create 640 mysql adm
+    notifempty
+    daily
+    rotate 10
+    size 10M
+    missingok
+    compress
+}
+
+EOF
+
+# sudo chmod 0644 /etc/logrotate.d/mysql
+
+
+
+# sudo logrotate -d /etc/logrotate.d/mysql
+
+
+
+
+
+---------------- Samba ---------------------
+
+
+
+
+# sudo apt-get update
+
+# sudo apt-get upgrade
+
+# sudo apt-get install samba -y
+
+# sudo cp /etc/samba/smb.conf /etc/samba/smb.conf.bak
+
+
+# sudo chmod 0666 /etc/samba/smb.conf
+
+# sudo cat << EOF > /etc/samba/smb.conf
+[global]
+security = user
+passdb backend = tdbsam
+workgroup = NULL
+server string = Samba
+
+[bochinskii]
+path = /web/sites/www.bochinskii.in/www
+valid users = @bochinskii.in
+force group = bochinskii.in
+create mask = 0664
+directory mask = 0771
+writable = yes
+browseable = yes
+
+EOF
+
+
+# sudo chmod 0644 /etc/samba/smb.conf
+
+
+
+# sudo su
+
+# export SMB_USER=bochinskii.in
+
+# export SMB_PASS=<some password>
+
+Only root can do that
+# (echo "$SMB_PASS"; echo "$SMB_PASS") | smbpasswd -s -a $SMB_USER
+
+# smbpasswd -e $SMB_USER
+
+# exit
+
+
+
+# sudo systemctl restart smbd.service; sudo systemctl enable smbd.service
+
+
+Посмотреть базу данных пользователей в Samba
+
+# sudo pdbedit -L -v
+
+
+------------ Composer --------------------
+
+# cd /tmp
+
+# php -r "copy('https://getcomposer.org/installer', 'composer-setup.php');"
+
+
+# HASH="$(wget -q -O - https://composer.github.io/installer.sig)"
+
+# php -r "if (hash_file('SHA384', 'composer-setup.php') === '$HASH') { echo 'Installer verified'; } else { echo 'Installer corrupt'; unlink('composer-setup.php'); } echo PHP_EOL;"
+
+
+
+# sudo php composer-setup.php --install-dir=/usr/bin --filename=composer
+
+
+----- Установка модулей  Drupal 9 ----------------
+
+https://www.drupal.org/docs/develop/using-composer/using-composer-to-install-drupal-and-manage-dependencies
+
+
+По сути мы таким образом делаем установку Drupal 9 с поддержкой composer. Т.е. можно было бы и нам таким образом установить,
+вместо того, как мы это делали выше, но мы сделали по другому т.к. установка с помощью composer в целях безопасности подходит для разработки.
+
+# cd ~
+
+# mkdir composer-project
+
+# composer create-project drupal/recommended-project composer-project
+
+
+example:
+
+# cd composer-project/
+
+# composer require 'drupal/admin_toolbar:^3.1'
+
+# sudo mv web/modules/contrib/admin_toolbar /web/sites/www.bochinskii.in/www/modules/
+
+# sudo chown -R bochinskii.in: /web/sites/www.bochinskii.in/www
+
+
+-------------- Update Drupal 9 -------------------
+
+https://www.drupal.org/ru/docs/user_guide/ru/security-update-core.html
+
+
+
+# sudo nano /web/sites/www.bochinskii.in/www/sites/default/settings.php
+
+$settings['update_free_access'] = TRUE;
+
+
+
+# sudo find /web/sites/www.bochinskii.in/www -maxdepth 1 -type f -exec rm -f {} \;
+
+# sudo rm -rf /web/sites/www.bochinskii.in/www/{core,vendor}
+
+
+
+# sudo curl -Lo /tmp/drupal.tar.gz https://www.drupal.org/download-latest/tar.gz
+
+# sudo tar -xzvf /tmp/drupal.tar.gz -C /web/sites/www.bochinskii.in/www --strip-components=1
+
+# sudo chown -R bochinskii.in: /web/sites/www.bochinskii.in/{www,log}
+
+
+
+In browser:
+
+httpd://bochinskii.in/update.php
+
+
+
+
+# sudo nano /web/sites/www.bochinskii.in/www/sites/default/settings.php
+
+$settings['update_free_access'] = FALSE;
+
+
+--------------------- Drupal Backup --------------
+
+
+Делаем это с помощью phpmyadmin
+
+или
+
+# sudo mysqldump --opt -v --databases $MYSQL_DRUPAL_DB -u$MYSQL_ADMIN_USER -p$MYSQL_ADMIN_USER_PASS > ~/$MYSQL_DRUPAL_DB.sql
+
+
+Если вы хотите в будущем при восстановлении базы данных изменить ее имя, то нужно сделать вот так ("--no-create-db")
+
+# sudo mysqldump --opt -v --routines --triggers $MYSQL_DRUPAL_DB -u$MYSQL_ADMIN_USER -p$MYSQL_ADMIN_USER_PASS > ~/$MYSQL_DRUPAL_DB.sql
+
+
+Денлаем архив сайта
+
+# sudo tar -cjf ~/bochinskii.in.tar.bz /web/sites/www.bochinskii.in/www
+
+
+
+----------------------- Drupal Restore ----------------
+
+
+Делаем это с помощью phpmyadmin
+
+или
+
+# sudo mysql --connect-expired-password -u$MYSQL_ADMIN_USER -p$MYSQL_ADMIN_USER_PASS -e "SHOW DATABASES;"
+
+# sudo mysql --connect-expired-password -u$MYSQL_ADMIN_USER -p$MYSQL_ADMIN_USER_PASS -e "DROP DATABASE $MYSQL_DRUPAL_DB;"
+
+# sudo mysql -u$MYSQL_ADMIN_USER -p$MYSQL_ADMIN_USER_PASS < ~/$MYSQL_DRUPAL_DB.sql
+
+
+
+Если при дампе базы вы использовали - "--no-create-db" и хотите использовать новое имя базы данных, то
+
+# sudo mysql --connect-expired-password -u$MYSQL_ADMIN_USER -p$MYSQL_ADMIN_USER_PASS -e "CREATE DATABASE $MYSQL_DRUPAL_DB_NEW_NAME CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+
+# sudo mysql -u$MYSQL_ADMIN_USER -p$MYSQL_ADMIN_USER_PASS -A -D$MYSQL_DRUPAL_DB_NEW_NAME < ~/$MYSQL_DRUPAL_DB.sql
+
+
+
+
+# sudo tar -xvf ~/bochinskii.in.tar.bz2 -C /web/sites/www.bochinskii.in/www --strip-components=4
+
+
+Если нужно изменить настройки Drupal касательно базы данных или пользователя базы данных, то изменяем вот эти строки как нужно в конце файла
+
+# sudo nano /web/sites/www.bochinskii.in/www/sites/default/settings.php
+
+$databases['default']['default'] = array (
+  'database' => 'bochinskii_in_db',
+  'username' => 'bochinskii_in_usr',
+  'password' => 'kjhsgfhsiofhsiuh',
+  'prefix' => '',
+  'host' => 'localhost',
+  'port' => '3306',
+  'namespace' => 'Drupal\\Core\\Database\\Driver\\mysql',
+  'driver' => 'mysql',
+);
+
+
