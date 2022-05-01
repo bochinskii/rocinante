@@ -35,7 +35,7 @@ $ timedatectl timesync-status
 
 ------------- SSH настройки-------------------------------------------
 
-$ export SSH_PORT=1820
+$ export SSH_PORT=<ssh port>
 
 $ sudo sed -i "s/^#?Port .*/Port $SSH_PORT/g" /etc/ssh/sshd_config
 
