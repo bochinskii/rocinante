@@ -13,7 +13,7 @@ $ sudo hostnamectl set-hostname $HOSTNAME
 
 $ timedatectl list-timezones | column
 
-$ export TIMEZONE=Europe/Berlin
+$ export TIMEZONE=<your timezone>
 
 $ sudo timedatectl set-timezone $TIMEZONE
 
