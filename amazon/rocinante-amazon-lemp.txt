@@ -2,7 +2,9 @@
 
 
 
-$ export HOSTNAME=rocinante
+$ export HOSTNAME=<your hostname>
+
+$ sudo yum makecache
 
 $ sudo yum update -y
 
@@ -38,7 +40,7 @@ $ timedatectl timesync-status
 
 $ export SSH_PORT=<ssh port>
 
-$ sudo sed -i "s/^#?Port .*/Port $SSH_PORT/g" /etc/ssh/sshd_config
+$ sudo sed -i "s/^#Port .*/Port $SSH_PORT/g" /etc/ssh/sshd_config
 
 
 
@@ -58,7 +60,7 @@ $ sudo systemctl reload sshd
 --------- NGINX -------
 
 
-$ sudo yum install yum-utils
+$ sudo yum install yum-utils -y
 
 
 $ sudo touch /etc/yum.repos.d/nginx.repo
@@ -92,11 +94,11 @@ $ sudo yum-config-manager --enable nginx-stable
 
 $ sudo yum install nginx -y
 
-$ sudo systemctl start nginx; sudo systemctl enable nginx
-
-
 
 $ sudo chown nginx:nginx /usr/share/nginx/html -R
+
+$ sudo systemctl start nginx; sudo systemctl enable nginx
+
 
 
 
@@ -261,7 +263,10 @@ $ sudo yum install $MYSQL_REPO -y
 
 $ sudo amazon-linux-extras install epel -y
 
-$ sudo yum install mysql-community-server -y
+
+$ sudo yum makecache
+
+$ sudo yum install --nogpgcheck  mysql-community-server -y
 
 $ sudo systemctl start mysqld; sudo systemctl enable mysqld
 
@@ -652,8 +657,7 @@ export SSL_CERT=rocinante.crt
 export SSL_KEY=rocinante.key
 
 
-$ sudo openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout /etc/nginx/tls/$SSL_KEY \
--out /etc/nginx/tls/$SSL_CERT -subj "/C=Mars/ST= /L=Mars/O=MCR/OU= /CN=rocinante.in"
+$ sudo openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout /etc/nginx/tls/$SSL_KEY -out /etc/nginx/tls/$SSL_CERT -subj "/C=MA/ST= /L=MCR/O= /OU= /CN=rocinante.in"
 
 
 $ sudo chmod 0666 /etc/nginx/conf.d/test.conf
@@ -704,7 +708,7 @@ $ sudo systemctl restart nginx
 ----------------------- Drupal 9 -------------------
 
 
-export SITE_DIR=/var/www/html/rocinante
+$ export SITE_DIR=/var/www/html/rocinante
 
 
 $ sudo mkdir -p $SITE_DIR/{www,log}
@@ -733,7 +737,7 @@ $ semanage fcontext -a -t httpd_sys_content_t "$SITE_DIR/www(/.*)?"
 $ restorecon -R -v $SITE_DIR/www
 
 
-export SITE_CONFIG=rocinante.conf
+$ export SITE_CONFIG=rocinante.conf
 
 
 # sudo touch /etc/nginx/conf.d/$SITE_CONFIG
@@ -1137,18 +1141,37 @@ $settings['update_free_access'] = FALSE;
 
 или
 
+1-й вариант
+
 $ sudo mysqldump --opt -v --databases $MYSQL_DRUPAL_DB -u$MYSQL_ADMIN_USER -p$MYSQL_ADMIN_USER_PASS > ~/$MYSQL_DRUPAL_DB.sql
+
+С жатием
+
+$ sudo mysqldump --opt -v --databases $MYSQL_DRUPAL_DB -u$MYSQL_ADMIN_USER -p$MYSQL_ADMIN_USER_PASS | bzip2 > ~/$MYSQL_DRUPAL_DB.sql.bz
 
 
 2-й вариант.
+
 Если вы хотите в будущем при восстановлении базы данных изменить ее имя, то нужно сделать вот так
 
 $ sudo mysqldump --opt -v --routines --triggers $MYSQL_DRUPAL_DB -u$MYSQL_ADMIN_USER -p$MYSQL_ADMIN_USER_PASS > ~/$MYSQL_DRUPAL_DB.sql
 
+С жатием
+
+$ sudo mysqldump --opt -v --routines --triggers $MYSQL_DRUPAL_DB -u$MYSQL_ADMIN_USER -p$MYSQL_ADMIN_USER_PASS | bzip2 > ~/$MYSQL_DRUPAL_DB.sql.bz
+
 
 Делаем архив сайта
 
+Так будет сохранен полный путь
+
 $ sudo tar -cjf ~/<archive name>.tar.bz $SITE_DIR/www
+
+или
+
+Так будет сохранен абсолютный путь т.е. архив будет начинаться с диретории - www.
+
+$ sudo tar -cjf ~/rocinante.tar.bz -C $SITE_DIR www
 
 
 
@@ -1181,21 +1204,77 @@ $ sudo mysql -u$MYSQL_ADMIN_USER -p$MYSQL_ADMIN_USER_PASS -A -D$MYSQL_DRUPAL_DB_
 
 
 
-$ sudo tar -xvf ~/<archive name>.tar.bz2 -C $SITE_DIR/www --strip-components=4
+$ sudo tar -xvf ~/<archive name>.tar.bz2 -C $SITE_DIR/www --strip-components=1
 
 
 Если нужно изменить настройки Drupal касательно базы данных или пользователя базы данных, то изменяем вот эти строки как нужно в конце файла
 
-$ sudo nano $SITE_DIR/www/sites/default/settings.php
+$ sudo chmod 0777 $SITE_DIR/www/sites/default/settings.php
 
+$ sudo cat << EOF >> $SITE_DIR/www/sites/default/settings.php
 
-$databases['default']['default'] = array (
-  'database' => '',
-  'username' => '',
-  'password' => '',
+\$databases['default']['default'] = array (
+  'database' => '$MYSQL_DRUPAL_DB',
+  'username' => '$MYSQL_DRUPAL_USER',
+  'password' => '$MYSQL_DRUPAL_USER_PASS',
   'prefix' => '',
   'host' => 'localhost',
   'port' => '3306',
   'namespace' => 'Drupal\\Core\\Database\\Driver\\mysql',
   'driver' => 'mysql',
 );
+
+EOF
+
+
+
+---------------------------------
+
+sudo chmod 0777 ./site/dbadmin/config.in.php
+
+sudo cat << EOF > ./site/dbadmin/config.in.php
+
+<?php
+
+$i = 0;
+
+/* Server: localhost [1] */
+\$i++;
+\$cfg['Servers'][\$i]['verbose'] = '';
+\$cfg['Servers'][\$i]['host'] = 'localhost';
+\$cfg['Servers'][\$i]['port'] = '';
+\$cfg['Servers'][\$i]['socket'] = '';
+\$cfg['Servers'][\$i]['auth_type'] = 'cookie';
+\$cfg['Servers'][\$i]['user'] = '';
+\$cfg['Servers'][\$i]['password'] = '';
+
+/* End of servers configuration */
+
+\$cfg['DefaultLang'] = 'en';
+\$cfg['blowfish_secret'] = '$PMA_BLOWFISH';
+\$cfg['ServerDefault'] = 1;
+\$cfg['UploadDir'] = '';
+\$cfg['SaveDir'] = '';
+
+\$cfg['TempDir'] = '$SITE_DIR/www/dbadmin/tmp';
+?>
+
+EOF
+
+sudo chmod 0644 ./site/dbadmin/config.in.php
+
+
+sudo cat << EOF >> ./site/sites/default/settings.php
+
+\$databases['default']['default'] = array (
+  'database' => '$MYSQL_DRUPAL_DB',
+  'username' => '$MYSQL_DRUPAL_USER',
+  'password' => '$MYSQL_DRUPAL_USER_PASS',
+  'prefix' => '',
+  'host' => 'localhost',
+  'port' => '3306',
+  'namespace' => 'Drupal\\Core\\Database\\Driver\\mysql',
+  'driver' => 'mysql',
+);
+
+EOF
