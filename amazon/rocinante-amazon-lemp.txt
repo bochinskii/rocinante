@@ -1170,7 +1170,7 @@ $ sudo tar -cjf ~/<archive name>.tar.bz $SITE_DIR/www
 
 Так будет сохранен абсолютный путь т.е. архив будет начинаться с диретории - www.
 
-$ sudo tar -cjf ~/rocinante.tar.bz -C $SITE_DIR www
+$ sudo tar -cjf ~/<archive name>.tar.bz -C $SITE_DIR www
 
 
 
