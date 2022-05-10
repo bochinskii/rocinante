@@ -811,7 +811,7 @@ server {
     }
 
     location @rewrite {
-        rewrite ^/(.*)$ /index.php?q=$1;
+        rewrite ^ /index.php;
     }
 
     location ~ /vendor/.*\.php$ {
@@ -868,11 +868,11 @@ server {
     }
 
     location ~ ^(/[a-z\-]+)?/system/files/ {
-        try_files \$uri /index.php?;
+        try_files \$uri /index.php?\$query_string;
     }
 
     if (\$request_uri ~* "^(.*/)index\.php/(.*)") {
-        return 307 \$1$2;
+        return 307 \$1\$2;
     }
 }
 
@@ -887,6 +887,10 @@ EOF
 $ sudo chmod 0644 /etc/nginx/conf.d/$SITE_CONFIG
 
 $ sudo systemctl restart nginx
+
+Если возникнут проблемы, то можно включить в settings.php вот такую строчку:
+
+$config['system.logging']['error_level']='verbose';
 
 
 
