@@ -888,9 +888,64 @@ $ sudo chmod 0644 /etc/nginx/conf.d/$SITE_CONFIG
 
 $ sudo systemctl restart nginx
 
-Если возникнут проблемы, то можно включить в settings.php вот такую строчку:
+
+
+
+Если возникнут проблемы, то можно включить в settings.php вот такую строчку
+(будет виден более детальный вывод ошибки на экран браузера):
 
 $config['system.logging']['error_level']='verbose';
+
+
+
+Заметка:
+
+Без https при загрузке страницы будет выдана ошибка на экран:
+
+"The website encountered an unexpected error. Please try again later."
+
+Ее можно решить путем очисти drupal кэша.
+
+1-й вариант:
+
+http://<site name>/user
+
+Configuration --> Performance --> clear cache
+
+Если такой метод не поможет, то
+
+
+2-й вариант
+
+Можно включить возможность обновления для всех, а не только для администратора сайта:
+
+$settings['update_free_access'] = TRUE;
+
+http://<site name>/update.php
+
+после этого кэш очистится.
+
+В целях безопасности, Не забудтьте вернуть настройку:
+
+$settings['update_free_access'] = FALSE;
+
+
+3-й вариант
+
+Залогиниваемся по ssh и очищаем определенные таблицы базы данных:
+
+TRUNCATE TABLE [database_name.]table_name;
+
+mysql --connect-expired-password -u$MYSQL_ADMIN_USER -p$MYSQL_ADMIN_USER_PASS -e "TRUNCATE TABLE $MYSQL_DRUPAL_DB.cache_config;"
+mysql --connect-expired-password -u$MYSQL_ADMIN_USER -p$MYSQL_ADMIN_USER_PASS -e "TRUNCATE TABLE $MYSQL_DRUPAL_DB.cache_container;"
+mysql --connect-expired-password -u$MYSQL_ADMIN_USER -p$MYSQL_ADMIN_USER_PASS -e "TRUNCATE TABLE $MYSQL_DRUPAL_DB.cache_data;"
+mysql --connect-expired-password -u$MYSQL_ADMIN_USER -p$MYSQL_ADMIN_USER_PASS -e "TRUNCATE TABLE $MYSQL_DRUPAL_DB.cache_default;"
+mysql --connect-expired-password -u$MYSQL_ADMIN_USER -p$MYSQL_ADMIN_USER_PASS -e "TRUNCATE TABLE $MYSQL_DRUPAL_DB.cache_discovery;"
+mysql --connect-expired-password -u$MYSQL_ADMIN_USER -p$MYSQL_ADMIN_USER_PASS -e "TRUNCATE TABLE $MYSQL_DRUPAL_DB.cache_dynamic_page_cache;"
+mysql --connect-expired-password -u$MYSQL_ADMIN_USER -p$MYSQL_ADMIN_USER_PASS -e "TRUNCATE TABLE $MYSQL_DRUPAL_DB.cache_entity;"
+mysql --connect-expired-password -u$MYSQL_ADMIN_USER -p$MYSQL_ADMIN_USER_PASS -e "TRUNCATE TABLE $MYSQL_DRUPAL_DB.cache_menu;"
+mysql --connect-expired-password -u$MYSQL_ADMIN_USER -p$MYSQL_ADMIN_USER_PASS -e "TRUNCATE TABLE $MYSQL_DRUPAL_DB.cache_render;"
+mysql --connect-expired-password -u$MYSQL_ADMIN_USER -p$MYSQL_ADMIN_USER_PASS -e "TRUNCATE TABLE $MYSQL_DRUPAL_DB.cache_toolbar;"
 
 
 
