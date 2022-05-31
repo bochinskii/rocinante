@@ -1050,6 +1050,10 @@ php8.0-gmp php8.0-intl php8.0-zip -y
 
 # sudo sed -i "s/^upload_max_filesize = .*/upload_max_filesize = 100M/g" /etc/php/8.0/fpm/php.ini
 
+Это для того, чтобы можно было делать импорт баз дынных через  php myadmin
+
+$ sudo sed -i "s/^post_max_size = .*/post_max_size = 100M/g" /etc/php/8.0/fpm/php.ini
+
 # sudo sed -i "s/^max_execution_time = .*/max_execution_time = 360/g" /etc/php/8.0/fpm/php.ini
 
 # sudo sed -i "s%^;date.timezone =%date.timezone = Europe/Moscow%g" /etc/php/8.0/fpm/php.ini

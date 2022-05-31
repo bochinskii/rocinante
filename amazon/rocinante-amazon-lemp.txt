@@ -568,6 +568,10 @@ $ sudo sed -i "s/^;cgi.fix_pathinfo=.*/cgi.fix_pathinfo = 0/g" /etc/php.ini
 
 $ sudo sed -i "s/^upload_max_filesize = .*/upload_max_filesize = 100M/g" /etc/php.ini
 
+Это для того, чтобы можно было делать импорт баз дынных через  php myadmin
+
+$ sudo sed -i "s/^post_max_size = .*/post_max_size = 100M/g" /etc/php.ini
+
 $ sudo sed -i "s/^max_execution_time = .*/max_execution_time = 360/g" /etc/php.ini
 
 $ sudo sed -i "s%^;date.timezone =%date.timezone = $TIMEZONE%g" /etc/php.ini
