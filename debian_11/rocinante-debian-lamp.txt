@@ -478,12 +478,12 @@ https://packages.sury.org/apache2/README.txt
 # sudo chown -R www-data:www-data /var/www/html
 
 
-Узнаем какие MPM модули установлены: 
+Узнаем какие MPM модули установлены:
 
 # sudo ls -l /etc/apache2/mods-available/mpm*
 
 
-Узнаем в каком MPM режиме работает apache. По умолчанию он работает в режиме - event. 
+Узнаем в каком MPM режиме работает apache. По умолчанию он работает в режиме - event.
 
 # sudo ls -l /etc/apache2/mods-enabled/mpm*
 
@@ -493,7 +493,7 @@ https://packages.sury.org/apache2/README.txt
 
 или
 
-Иногда можно это еще узнать таким образом, но не всегда он показывает 
+Иногда можно это еще узнать таким образом, но не всегда он показывает
 
 # sudo apache2 -V | grep "Server MPM"
 
@@ -576,8 +576,8 @@ MaxRequestWorkers (ранее известная как MaxClients) = Памят
 # sudo cat << EOF > /etc/nginx/conf.d/gzip.conf
 # Gzip ########################
 
-gzip on; 
-gzip_static on; 
+gzip on;
+gzip_static on;
 gzip_types text/plain text/css application/json application/x-javascript text/xml application/xml application/xml+rss text/javascript application/javascript image/x-icon image/svg+xml application/x-font-ttf;
 gzip_comp_level 9;
 gzip_proxied any;
@@ -598,7 +598,7 @@ EOF
 
 # sudo cat << EOF > /etc/nginx/conf.d/limits.conf
 # Limits ########################
-    
+
 client_max_body_size 10m;
 # For import db through PHPMyAdmin
 # client_max_body_size 1000m
@@ -625,7 +625,7 @@ EOF
 
 # sudo cat << EOF > /etc/nginx/conf.d/zone_limits.conf
 # Zone Limits ########################
-    
+
 limit_conn_zone \$binary_remote_addr zone=perip:10m;
 limit_req_zone \$binary_remote_addr zone=lim_5r:10m rate=5r/s; # lim for dynamic page
 limit_req_zone \$binary_remote_addr zone=lim_1r:10m rate=1r/s; # lim for search page
@@ -749,6 +749,36 @@ EOF
 В начале устновки выйдет меню и попросит ввести пароль для - "root".
 Можно ввести пароль, который вы занесли в переменную - "MYSQL_ROOT_PASS"
 
+
+------------------------------------------------------
+БОНУС:
+
+Если вдруг понадобится MYSQL 5.7
+
+
+https://dev.mysql.com/downloads/repo/apt/
+
+$ sudo dpkg -i mysql-apt-config_0.8.18-1_all.deb
+
+
+Меню:
+
+debian buster
+
+MYSQL Server & Cluster
+
+mysql-5.7
+
+OK
+
+
+
+$ sudo apt-get update
+
+$ sudo apt-get install mysql-community-server -y
+
+
+---------------------------------------------------------
 
 
 Проверим, что мы точно установили 8 версию.
@@ -891,7 +921,7 @@ wait_timeout=300
 
 # === Buffer Settings === Careful RAM usage. Change this variables with some database diagnostics tools
 
-join_buffer_size=4M # UPD 
+join_buffer_size=4M # UPD
 read_buffer_size=3M # UPD
 read_rnd_buffer_size=4M # UPD
 sort_buffer_size=4M # UPD
@@ -1090,9 +1120,13 @@ php8.0-gmp php8.0-intl php8.0-zip -y
 
 # sudo sed -i "s/^;cgi.fix_pathinfo=.*/cgi.fix_pathinfo = 0/g" /etc/php/8.0/fpm/php.ini
 
+
+Это для того, чтобы можно было делать импорт баз дынных через  php myadmin
+
 # sudo sed -i "s/^upload_max_filesize = .*/upload_max_filesize = 100M/g" /etc/php/8.0/fpm/php.ini
 
 # sudo sed -i "s/^max_execution_time = .*/max_execution_time = 360/g" /etc/php/8.0/fpm/php.ini
+
 
 # sudo sed -i "s%^;date.timezone =%date.timezone = Europe/Moscow%g" /etc/php/8.0/fpm/php.ini
 
@@ -1408,7 +1442,7 @@ server {
    # phpMyAdmin:
     location /dbadmin {
         index index.php;
-        
+
         auth_basic "Only for me";
         auth_basic_user_file /etc/nginx/.htpasswd;
     }
@@ -1423,7 +1457,7 @@ server {
         log_not_found off;
         access_log off;
     }
-    
+
 
     # Very rarely should these ever be accessed outside of your lan
     location ~* \.(txt|log)$ {
@@ -1446,7 +1480,7 @@ server {
     location ~* ^/.well-known/ {
         allow all;
     }
-    
+
     # Block access to "hidden" files and directories whose names begin with a
     # period. This includes directories used by version control systems such
     # as Subversion or Git to store control files.
@@ -1454,7 +1488,7 @@ server {
     location ~ (^|/)\. {
         return 403;
     }
-   
+
    location / {
         try_files \$uri /index.php?\$query_string;
     }
@@ -1480,7 +1514,7 @@ server {
 
         include fastcgi_params;
 
-        fastcgi_param DOCUMENT_ROOT \$document_root;		
+        fastcgi_param DOCUMENT_ROOT \$document_root;
         fastcgi_param HTTP_PROXY "";
         fastcgi_param SCRIPT_FILENAME \$document_root\$fastcgi_script_name;
         fastcgi_param PATH_TRANSLATED \$document_root\$fastcgi_script_name;
@@ -1488,10 +1522,10 @@ server {
         fastcgi_param CONTENT_TYPE \$content_type;
         fastcgi_param CONTENT_LENGTH \$content_length;
         # when https is on
-        fastcgi_param HTTPS on; 
+        fastcgi_param HTTPS on;
         fastcgi_param PATH_INFO \$fastcgi_path_info;
         fastcgi_param QUERY_STRING \$query_string;
-		
+
         fastcgi_intercept_errors on;
         fastcgi_index index.php;
         fastcgi_ignore_client_abort off;
@@ -1504,7 +1538,7 @@ server {
         fastcgi_temp_file_write_size 256k;
 
         fastcgi_pass unix:/run/php/www.bochinskii.in.sock;
-		
+
     }
 
     location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg)$ {
@@ -1608,7 +1642,7 @@ EOF
 # export PMA_HTPASSW=<some password>
 
 
-Дополнительно к аутентификации mysql сделаем айтентификацию с помощью сервера nginx 
+Дополнительно к аутентификации mysql сделаем айтентификацию с помощью сервера nginx
 
 # sudo apt-get update
 
@@ -1635,7 +1669,7 @@ EOF
         daily
         missingok
         rotate 10
-        size 10M		
+        size 10M
         compress
         delaycompress
         notifempty
@@ -1919,5 +1953,3 @@ $databases['default']['default'] = array (
   'namespace' => 'Drupal\\Core\\Database\\Driver\\mysql',
   'driver' => 'mysql',
 );
-
-

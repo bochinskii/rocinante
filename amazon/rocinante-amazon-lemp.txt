@@ -270,9 +270,22 @@ $ sudo yum install --nogpgcheck  mysql-community-server -y
 
 $ sudo systemctl start mysqld; sudo systemctl enable mysqld
 
+--------------------------------------------------------------------------------------
+
+БОНУС:
+
+Если вдруг понадобится MYSQL 5.7
+
+$ sudo curl -Lo /tmp/mysql57-community-release-el7-11.noarch.rpm https://dev.mysql.com/get/mysql57-community-release-el7-11.noarch.rpm
+
+$ sudo yum localinstall mysql57-community-release-el7-11.noarch.rpm
+
+$ sudo yum install mysql-community-server
 
 
-$ export MYSQL_TEMP_PASS=`sudo grep 'temporary password' /var/log/mysqld.log | cut -d: -f4 | cut -b 2-`
+-----------------------------------------------------------------------------------------
+
+$ export MYSQL_TEMP_PASS=`sudo grep 'temporary password' /var/log/mysqld.log | cut -d " " -f13`
 
 $ export MYSQL_ROOT_PASS=<some root password>
 
@@ -566,11 +579,13 @@ $ sudo sed -i "s/^memory_limit = .*/memory_limit = 256M/g" /etc/php.ini
 
 $ sudo sed -i "s/^;cgi.fix_pathinfo=.*/cgi.fix_pathinfo = 0/g" /etc/php.ini
 
-$ sudo sed -i "s/^upload_max_filesize = .*/upload_max_filesize = 100M/g" /etc/php.ini
 
 Это для того, чтобы можно было делать импорт баз дынных через  php myadmin
 
+$ sudo sed -i "s/^upload_max_filesize = .*/upload_max_filesize = 100M/g" /etc/php.ini
+
 $ sudo sed -i "s/^post_max_size = .*/post_max_size = 100M/g" /etc/php.ini
+
 
 $ sudo sed -i "s/^max_execution_time = .*/max_execution_time = 360/g" /etc/php.ini
 
