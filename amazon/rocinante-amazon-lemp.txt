@@ -1220,22 +1220,22 @@ $settings['update_free_access'] = FALSE;
 
 1-й вариант
 
-$ sudo mysqldump --opt -v --databases $MYSQL_DRUPAL_DB -u$MYSQL_ADMIN_USER -p$MYSQL_ADMIN_USER_PASS > ~/$MYSQL_DRUPAL_DB.sql
+$ sudo mysqldump --add-drop-database --add-locks --create-options --disable-keys --extended-insert --single-transaction --quick --set-charset --routines --events --triggers --comments --quote-names --order-by-primary --hex-blob --databases $MYSQL_DRUPAL_DB -u$MYSQL_ADMIN_USER -p$MYSQL_ADMIN_USER_PASS > ~/$MYSQL_DRUPAL_DB.sql
 
 С жатием
 
-$ sudo mysqldump --opt -v --databases $MYSQL_DRUPAL_DB -u$MYSQL_ADMIN_USER -p$MYSQL_ADMIN_USER_PASS | bzip2 > ~/$MYSQL_DRUPAL_DB.sql.bz
+$ sudo mysqldump --add-drop-database --add-locks --create-options --disable-keys --extended-insert --single-transaction --quick --set-charset --routines --events --triggers --comments --quote-names --order-by-primary --hex-blob --databases $MYSQL_DRUPAL_DB -u$MYSQL_ADMIN_USER -p$MYSQL_ADMIN_USER_PASS | bzip2 > ~/$MYSQL_DRUPAL_DB.sql.bz
 
 
 2-й вариант.
 
 Если вы хотите в будущем при восстановлении базы данных изменить ее имя, то нужно сделать вот так
 
-$ sudo mysqldump --opt -v --routines --triggers $MYSQL_DRUPAL_DB -u$MYSQL_ADMIN_USER -p$MYSQL_ADMIN_USER_PASS > ~/$MYSQL_DRUPAL_DB.sql
+$ sudo mysqldump --add-drop-database --add-locks --create-options --disable-keys --extended-insert --single-transaction --quick --set-charset --routines --events --triggers --comments --quote-names --order-by-primary --hex-blob $MYSQL_DRUPAL_DB -u$MYSQL_ADMIN_USER -p$MYSQL_ADMIN_USER_PASS > ~/$MYSQL_DRUPAL_DB.sql
 
 С жатием
 
-$ sudo mysqldump --opt -v --routines --triggers $MYSQL_DRUPAL_DB -u$MYSQL_ADMIN_USER -p$MYSQL_ADMIN_USER_PASS | bzip2 > ~/$MYSQL_DRUPAL_DB.sql.bz
+$ sudo mysqldump --add-drop-database --add-locks --create-options --disable-keys --extended-insert --single-transaction --quick --set-charset --routines --events --triggers --comments --quote-names --order-by-primary --hex-blob -u$MYSQL_ADMIN_USER -p$MYSQL_ADMIN_USER_PASS | bzip2 > ~/$MYSQL_DRUPAL_DB.sql.bz
 
 
 Делаем архив сайта
